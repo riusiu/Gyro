@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>目隠しスイカ割り(2台版・WebRTC) | Blind Suika Wari</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root{
+    --sky-top:#241539; --sky-mid:#5a2a5e; --sky-bottom:#ff7a54;
+    --sand:#f2cd7e; --sand-dark:#c99a3f; --sea:#12615e;
+    --ink:#120b17; --ink-soft:#1c1225;
+    --mint:#7fe8c9; --rose:#ff6b6b;
+    --melon-green:#2f8f4e; --melon-dark:#195e33;
+    --text:#f7ecd9; --text-dim:#cbb99a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{margin:0; padding:0; height:100%; overflow:hidden; background:var(--ink); font-family:'Inter',sans-serif; color:var(--text); -webkit-font-smoothing:antialiased; touch-action:none; overscroll-behavior:none;}
+  .display{font-family:'Baloo 2',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  #app{position:relative; width:100vw; height:100vh; background:var(--ink);}
+  .screen{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:20;
+    background:radial-gradient(circle at 30% 20%, rgba(90,42,94,.55), rgba(18,11,23,.96) 70%);}
+  .screen.hidden{display:none;}
+  .card{width:min(92vw,520px); max-height:90vh; overflow:auto; background:linear-gradient(160deg,var(--ink-soft),#17101f);
+    border:1px solid rgba(255,255,255,.1); border-radius:20px; padding:30px 28px; box-shadow:0 30px 60px rgba(0,0,0,.5);}
+  .card h1{font-family:'Baloo 2',sans-serif; font-size:clamp(22px,5vw,32px); margin:0 0 6px;
+    background:linear-gradient(90deg,var(--mint),#ffd97f,var(--rose)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .card p.sub{margin:0 0 20px; color:var(--text-dim); font-size:13.5px; line-height:1.65;}
+  .warn-box{background:rgba(255,107,107,.1); border:1px solid rgba(255,107,107,.35); border-radius:12px; padding:12px 14px; font-size:12.5px; line-height:1.6; color:#ffd0ce; margin-bottom:20px;}
+  .warn-box b{color:#ff9f9c;}
+
+  .role-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;}
+  .role-card{background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:18px 12px; text-align:center; cursor:pointer;}
+  .role-card:active{background:rgba(255,255,255,.1);}
+  .role-card .emoji{font-size:32px; display:block; margin-bottom:8px;}
+  .role-card .name{font-family:'Baloo 2',sans-serif; font-weight:700; font-size:15px;}
+  .role-card .desc{font-size:11px; color:var(--text-dim); margin-top:4px; line-height:1.4;}
+
+  .btn{appearance:none; border:none; cursor:pointer; width:100%; padding:15px 20px; border-radius:12px;
+    font-family:'Baloo 2',sans-serif; font-size:17px; font-weight:700; letter-spacing:.02em;
+    background:linear-gradient(90deg,var(--rose),#ff9457); color:#241030;
+    box-shadow:0 8px 0 #b3402f, 0 10px 20px rgba(255,107,107,.3); transition:transform .08s ease; margin-top:8px;}
+  .btn:active{transform:translateY(6px); box-shadow:0 2px 0 #b3402f;}
+  .btn.secondary{background:linear-gradient(90deg,var(--mint),#5fc7ad); box-shadow:0 8px 0 #3c9b83, 0 10px 20px rgba(127,232,201,.25);}
+  .btn.secondary:active{box-shadow:0 2px 0 #3c9b83;}
+  .btn.ghost{background:rgba(255,255,255,.06); color:var(--text); box-shadow:none; border:1px solid rgba(255,255,255,.16); font-size:13px; padding:11px;}
+  .btn.ghost:active{transform:none; background:rgba(255,255,255,.12);}
+  .btn:disabled{opacity:.45; pointer-events:none;}
+
+  .code-box{text-align:center; margin:18px 0;}
+  .code-box .label{font-size:11px; color:var(--text-dim); letter-spacing:.1em; text-transform:uppercase; margin-bottom:8px;}
+  .code-box .code{font-family:'JetBrains Mono',monospace; font-size:44px; font-weight:700; letter-spacing:.14em; color:var(--mint);
+    background:rgba(127,232,201,.08); border:1px dashed rgba(127,232,201,.4); border-radius:14px; padding:14px 10px;}
+
+  .code-input{width:100%; text-align:center; font-family:'JetBrains Mono',monospace; font-size:32px; letter-spacing:.2em;
+    padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,.2); background:rgba(0,0,0,.25); color:var(--text); margin:14px 0;
+    text-transform:uppercase;}
+  .code-input:focus{outline:2px solid var(--mint);}
+
+  .spinner{width:20px; height:20px; border-radius:50%; border:3px solid rgba(255,255,255,.2); border-top-color:var(--mint);
+    animation:spin 0.9s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .status-line{display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--text-dim); margin:14px 0;}
+  .err-line{color:var(--rose); font-size:12.5px; text-align:center; min-height:16px; margin-top:-6px; margin-bottom:8px;}
+
+  /* ---- Game view (fullscreen, one per device) ---- */
+  #gameView{position:absolute; inset:0; z-index:5;}
+  #gameView.hidden{display:none;}
+  .panel{position:absolute; inset:0;}
+  .panel canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
+
+  .tag{position:absolute; top:calc(10px + env(safe-area-inset-top)); left:12px; z-index:6; display:flex; align-items:center; gap:8px;
+    padding:6px 14px 6px 10px; border-radius:999px; background:rgba(18,11,23,0.6); backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,0.12); font-size:11px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; color:var(--text-dim);}
+  .tag .dot{width:8px;height:8px;border-radius:50%;}
+  .tag.blind .dot{background:var(--rose); box-shadow:0 0 8px var(--rose);}
+  .tag.spotter .dot{background:var(--mint); box-shadow:0 0 8px var(--mint);}
+
+  #fpvCanvas{filter:blur(3.5px) brightness(0.32) saturate(0.55) contrast(1.1); transition:filter .4s;}
+  #fpvCanvas.stunned{filter:blur(6px) brightness(0.15) saturate(0.2) hue-rotate(-20deg);}
+  .blindfold-cloth{position:absolute; inset:0; z-index:3; pointer-events:none;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,0) 38%, rgba(0,0,0,0.55) 78%, rgba(0,0,0,0.92) 100%),
+      repeating-linear-gradient(115deg, rgba(60,20,30,0.14) 0 18px, rgba(0,0,0,0) 18px 40px);
+    mix-blend-mode:multiply;}
+
+  .player-hud{position:absolute; inset:0; z-index:7; pointer-events:none;}
+  .top-stat-bar{position:absolute; top:calc(48px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);}
+  .melon-meter{width:min(70vw,340px); height:16px; border-radius:999px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.18); overflow:hidden; position:relative;}
+  .melon-meter-fill{height:100%; width:100%; background:linear-gradient(90deg,var(--melon-green),#59c27a); transition:width .25s ease;}
+  .melon-meter-label{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; letter-spacing:.06em; color:#0c2415; text-shadow:0 1px 0 rgba(255,255,255,.3);}
+  .toast{position:absolute; top:calc(84px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%) translateY(-6px);
+    background:rgba(18,11,23,.75); border:1px solid rgba(255,255,255,.16); padding:8px 18px; border-radius:10px; font-weight:700; font-size:15px;
+    opacity:0; transition:opacity .18s ease, transform .18s ease; white-space:nowrap;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.good{color:var(--mint);} .toast.bad{color:var(--rose);}
+  .stat-corner{position:absolute; top:calc(10px + env(safe-area-inset-top)); right:12px; font-size:10.5px; color:var(--text-dim); text-align:right; display:flex; flex-direction:column; gap:2px; font-weight:600;}
+
+  /* touch controls */
+  .touch-controls{position:absolute; inset:0; z-index:8; pointer-events:none;}
+  .ctrl-btn{position:absolute; pointer-events:auto; display:flex; align-items:center; justify-content:center;
+    border-radius:16px; background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.22);
+    color:var(--text); font-family:'Baloo 2',sans-serif; font-weight:700; font-size:13px; user-select:none;}
+  .ctrl-btn:active, .ctrl-btn.active{background:rgba(255,255,255,.24);}
+  #btnFwd{width:74px; height:64px; left:calc(16px + env(safe-area-inset-left)); bottom:calc(122px + env(safe-area-inset-bottom));}
+  #btnBack{width:74px; height:46px; left:calc(16px + env(safe-area-inset-left)); bottom:calc(52px + env(safe-area-inset-bottom)); opacity:.85;}
+  #btnLeft{width:56px; height:56px; left:calc(96px + env(safe-area-inset-left)); bottom:calc(56px + env(safe-area-inset-bottom)); border-radius:50%;}
+  #btnRight{width:56px; height:56px; left:calc(158px + env(safe-area-inset-left)); bottom:calc(56px + env(safe-area-inset-bottom)); border-radius:50%;}
+  #btnSwing{width:96px; height:96px; right:calc(20px + env(safe-area-inset-right)); bottom:calc(46px + env(safe-area-inset-bottom));
+    border-radius:50%; background:radial-gradient(circle at 35% 30%, #ff8f6b, var(--rose) 70%); border:2px solid rgba(255,255,255,.4);
+    color:#2a0f0f; font-size:16px; box-shadow:0 8px 18px rgba(255,107,107,.35);}
+  #btnSwing:active{transform:scale(0.92);}
+  .gyro-toggle{position:absolute; left:12px; z-index:9; pointer-events:auto;
+    font-size:10.5px; color:var(--text-dim); display:flex; align-items:center; gap:5px; background:rgba(0,0,0,.45); padding:4px 8px; border-radius:8px;}
+  .gyro-toggle input{transform:scale(0.8);}
+
+  /* ---- Spotter panel ---- */
+  #topCanvas{background:var(--sand);}
+  .spotter-hud{position:absolute; bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; right:12px; z-index:6;
+    display:flex; justify-content:space-between; align-items:flex-end; pointer-events:none; font-size:12px; color:var(--ink-soft); font-weight:600;}
+  .legend{display:flex; gap:12px; background:rgba(251,243,227,.85); border:1px solid rgba(0,0,0,.08); padding:8px 12px; border-radius:10px; backdrop-filter:blur(4px); flex-wrap:wrap;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .legend i{width:10px;height:10px;border-radius:50%; display:inline-block;}
+  .readout-stack{display:flex; flex-direction:column; gap:6px; align-items:flex-end;}
+  .readout{background:rgba(18,11,23,.8); color:var(--mint); padding:7px 13px; border-radius:9px; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12.5px; border:1px solid rgba(127,232,201,.3);}
+
+  /* Result screen */
+  .grade-hero{display:flex; align-items:center; gap:18px; margin-bottom:16px;}
+  .grade-circle{width:88px; height:88px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-family:'Baloo 2',sans-serif; font-size:40px; font-weight:800; color:#1a1020; box-shadow:0 0 0 6px rgba(255,255,255,.08), 0 12px 26px rgba(0,0,0,.4);}
+  .grade-title{font-family:'Baloo 2',sans-serif; font-size:19px; margin:0 0 4px;}
+  .grade-desc{font-size:12.5px; color:var(--text-dim); margin:0;}
+  .result-stats{display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; margin:18px 0 22px;}
+  .result-stats div{background:rgba(255,255,255,.04); border-radius:12px; padding:11px 8px; text-align:center;}
+  .result-stats .val{font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:700; color:var(--mint);}
+  .result-stats .lbl{font-size:10.5px; color:var(--text-dim); margin-top:3px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Role select -->
+  <div class="screen" id="scrRole">
+    <div class="card">
+      <h1 class="display">🏖️ 目隠しスイカ割り</h1>
+      <p class="sub">スマホと PC の2台で遊びます。まずこの端末の役割を選んでください。同じ画面を開いたもう一方の端末で、もう片方の役割を選びます。</p>
+      <div class="warn-box" id="connStateBox"><b>接続方式:</b> WebRTCで2台が直接つながります(遅延ほぼ無し)。このページを<b>GitHub Pagesなど自分の公開URL</b>で開いていればジャイロも使えます。</div>
+      <div class="role-grid">
+        <div class="role-card" id="pickPlayer">
+          <span class="emoji">🙈</span>
+          <div class="name">目隠しプレイヤー</div>
+          <div class="desc">スマホ推奨<br>タッチで操作</div>
+        </div>
+        <div class="role-card" id="pickSpotter">
+          <span class="emoji">🧭</span>
+          <div class="name">観測者</div>
+          <div class="desc">PC推奨<br>上から見て誘導</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Host: show code / wait for spotter -->
+  <div class="screen hidden" id="scrHost">
+    <div class="card">
+      <h1 class="display">合言葉を伝えよう</h1>
+      <p class="sub">このコードを観測者側の端末に入力してもらってください。</p>
+      <div class="code-box"><div class="label">ROOM CODE</div><div class="code mono" id="hostCodeDisplay">----</div></div>
+      <div class="status-line" id="hostWaitStatus"><span class="spinner"></span>観測者の参加を待っています…</div>
+      <button class="btn" id="hostStartBtn" disabled>目隠しをつけてスタート</button>
+      <button class="btn ghost" id="hostSoloBtn">観測者なしでテスト開始</button>
+      <button class="btn ghost" id="hostBackBtn">役割選択に戻る</button>
+    </div>
+  </div>
+
+  <!-- Spotter: enter code -->
+  <div class="screen hidden" id="scrJoin">
+    <div class="card">
+      <h1 class="display">合言葉を入力</h1>
+      <p class="sub">プレイヤー側の端末に表示されている4桁のコードを入力してください。</p>
+      <input class="code-input" id="joinCodeInput" maxlength="4" placeholder="XXXX" autocomplete="off" autocapitalize="characters">
+      <div class="err-line" id="joinErr"></div>
+      <button class="btn secondary" id="joinBtn">参加する</button>
+      <button class="btn ghost" id="joinBackBtn">役割選択に戻る</button>
+    </div>
+  </div>
+
+  <!-- Spotter: waiting for host to start -->
+  <div class="screen hidden" id="scrJoinWait">
+    <div class="card">
+      <h1 class="display">接続しました！</h1>
+      <p class="sub">プレイヤー側の準備が終わるのを待っています。目隠しをつけてもらいましょう。</p>
+      <div class="status-line"><span class="spinner"></span>プレイヤー開始待ち…</div>
+      <button class="btn ghost" id="joinWaitBackBtn">役割選択に戻る</button>
+    </div>
+  </div>
+
+  <!-- Actual game -->
+  <div id="gameView" class="hidden">
+    <div class="panel" id="playerPanel">
+      <canvas id="fpvCanvas"></canvas>
+      <div class="blindfold-cloth"></div>
+      <div class="tag blind"><span class="dot"></span>目隠しプレイヤー</div>
+      <div class="player-hud">
+        <div class="top-stat-bar"><div class="melon-meter"><div class="melon-meter-fill" id="melonFill"></div>
+          <div class="melon-meter-label" id="melonLabel">スイカ耐久 100%</div></div></div>
+        <div class="toast" id="toast">-</div>
+        <div class="stat-corner"><span id="statTime">⏱ 0.0s</span><span id="statSwings">🏏 0 スイング</span></div>
+      </div>
+      <div class="touch-controls">
+        <div class="ctrl-btn" id="btnFwd">▲<br>前進</div>
+        <div class="ctrl-btn" id="btnBack">▼ 後退</div>
+        <div class="ctrl-btn" id="btnLeft">◀</div>
+        <div class="ctrl-btn" id="btnRight">▶</div>
+        <div class="ctrl-btn" id="btnSwing">たたく！</div>
+      </div>
+      <label class="gyro-toggle" style="top:calc(46px + env(safe-area-inset-top));"><input type="checkbox" id="gyroToggle">向きで回転(任意)</label>
+      <label class="gyro-toggle" id="gyroInvertRow" style="top:calc(72px + env(safe-area-inset-top)); display:none;"><input type="checkbox" id="gyroInvert">回転が逆なら反転</label>
+      <div class="gyro-toggle" id="gyroDebug" style="top:calc(98px + env(safe-area-inset-top)); display:none; font-family:'JetBrains Mono',monospace;"></div>
+    </div>
+
+    <div class="panel hidden" id="spotterPanel">
+      <canvas id="topCanvas"></canvas>
+      <div class="tag spotter"><span class="dot"></span>観測者ビュー(上空)</div>
+      <div class="spotter-hud">
+        <div class="legend">
+          <span><i style="background:#7a4a1e"></i>落とし穴</span>
+          <span><i style="background:#ff5a63"></i>スイカ</span>
+          <span><i style="background:#12615e"></i>プレイヤー</span>
+        </div>
+        <div class="readout-stack">
+          <div class="readout" id="distanceReadout">距離 -- m</div>
+          <div class="readout" id="melonReadout">耐久 100%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="screen hidden" id="scrResult">
+    <div class="card">
+      <div class="grade-hero">
+        <div class="grade-circle" id="gradeCircle">S</div>
+        <div><p class="grade-title display" id="gradeTitle">パーフェクトスプリット！</p><p class="grade-desc" id="gradeDesc">まん丸に、綺麗な一撃でした。</p></div>
+      </div>
+      <div class="result-stats">
+        <div><div class="val" id="statAccuracy">0%</div><div class="lbl">綺麗さスコア</div></div>
+        <div><div class="val" id="statHits">0</div><div class="lbl">命中回数</div></div>
+        <div><div class="val" id="statFinalTime">0.0s</div><div class="lbl">タイム</div></div>
+      </div>
+      <button class="btn" id="retryBtn">もう一回スイカ割り</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ================= PeerJS (WebRTC) helpers =================
+  const PEER_PREFIX = 'suikawari5-';
+  let peer = null, conn = null;
+  function genCode(){
+    const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let c=''; for(let i=0;i<4;i++) c+=chars[Math.floor(Math.random()*chars.length)];
+    return c;
+  }
+  function teardownPeer(){
+    try{ if(conn) conn.close(); }catch(e){}
+    try{ if(peer) peer.destroy(); }catch(e){}
+    conn=null; peer=null;
+  }
+
+  // ================= Screen helpers =================
+  const screens = ['scrRole','scrHost','scrJoin','scrJoinWait','scrResult'];
+  function showScreen(id){
+    screens.forEach(s=> document.getElementById(s).classList.toggle('hidden', s!==id));
+    document.getElementById('gameView').classList.toggle('hidden', true);
+  }
+  function showGame(){
+    screens.forEach(s=> document.getElementById(s).classList.add('hidden'));
+    document.getElementById('gameView').classList.remove('hidden');
+  }
+
+  let role = null;      // 'player' | 'spotter'
+  let roomCode = null;
+  let timers = [];
+  function clearTimers(){ timers.forEach(t=>clearInterval(t)); timers=[]; }
+
+  // ================= Audio =================
+  let audioCtx = null;
+  function ensureAudio(){ if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
+  function beep(freq,dur,type,vol,delay){
+    if(!audioCtx) return;
+    delay=delay||0;
+    const t0=audioCtx.currentTime+delay;
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.type=type||'sine'; osc.frequency.setValueAtTime(freq,t0);
+    gain.gain.setValueAtTime(0.0001,t0);
+    gain.gain.exponentialRampToValueAtTime(vol||0.2,t0+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+dur+0.02);
+  }
+  function sfxSwoosh(){ beep(320,0.18,'sine',0.15); beep(200,0.15,'sine',0.1,0.05); }
+  function sfxHit(acc){ const f=140+acc*2.2; beep(f,0.14,'square',0.22); beep(f*0.5,0.2,'triangle',0.18,0.02); }
+  function sfxMiss(){ beep(180,0.22,'sawtooth',0.12); }
+  function sfxStumble(){ beep(90,0.3,'square',0.2); beep(70,0.35,'square',0.15,0.05); }
+  function sfxBreak(){ [0,0.08,0.16,0.28].forEach((d,i)=>beep(260-i*30,0.3,'square',0.22,d)); beep(880,0.5,'sine',0.15,0.3); beep(1100,0.6,'sine',0.12,0.4); }
+
+  // ================= World / game state =================
+  const WORLD_W=20, WORLD_H=20;
+  let player, melon, holes, keys, swing, stats, gameState='idle';
+  let lastEvent = {type:null, seq:0, accuracy:0};
+
+  function buildWorld(){
+    player = {x:WORLD_W/2, y:WORLD_H-3.2, angle:0};
+    melon = {x:WORLD_W/2+(Math.random()*4-2), y:5+Math.random()*3, radius:0.85, integrity:100, hits:[]};
+    holes = [];
+    let attempts=0;
+    while(holes.length<5 && attempts<200){
+      attempts++;
+      const hx=2+Math.random()*(WORLD_W-4), hy=6+Math.random()*(WORLD_H-9), hr=0.55+Math.random()*0.45;
+      const dMelon=Math.hypot(hx-melon.x,hy-melon.y), dStart=Math.hypot(hx-player.x,hy-player.y);
+      let tooClose = dMelon<melon.radius+1.1 || dStart<2.2;
+      for(const h of holes){ if(Math.hypot(hx-h.x,hy-h.y)<hr+h.r+0.9){tooClose=true;break;} }
+      if(!tooClose) holes.push({x:hx,y:hy,r:hr});
+    }
+    keys={w:false,a:false,s:false,d:false};
+    swing={phase:'idle',t:0,cooldown:0};
+    stats={time:0,swings:0,misses:0,stunned:false,stunTimer:0};
+    lastEvent={type:null,seq:0,accuracy:0};
+  }
+
+  // ---- shared toast/hud helpers ----
+  const toastEl=document.getElementById('toast');
+  function showToast(text,cls){
+    toastEl.textContent=text; toastEl.className='toast show '+(cls||'');
+    clearTimeout(showToast._t); showToast._t=setTimeout(()=>toastEl.classList.remove('show'),1100);
+  }
+
+  // ================= Player-side physics =================
+  const FORWARD_SPEED=3.3, BACK_SPEED=1.9, ROT_SPEED=2.5, WORLD_MARGIN=0.6;
+  let gyroTurn = 0;
+
+  function trySwing(){
+    if(stats.stunned || swing.phase!=='idle' || swing.cooldown>0) return;
+    swing.phase='windup'; swing.t=0; swing.hitDone=false;
+    stats.swings++; sfxSwoosh();
+  }
+
+  function resolveSwingHit(){
+    const fx=Math.sin(player.angle), fy=-Math.cos(player.angle);
+    const dx=melon.x-player.x, dy=melon.y-player.y;
+    const dist=Math.hypot(dx,dy);
+    const forward=dx*fx+dy*fy;
+    const angleTo=Math.atan2(dx,-dy);
+    let angleDiff=angleTo-player.angle;
+    while(angleDiff>Math.PI) angleDiff-=Math.PI*2;
+    while(angleDiff<-Math.PI) angleDiff+=Math.PI*2;
+    const angleDeg=Math.abs(angleDiff*180/Math.PI);
+    const REACH=2.35, ARC=52, SWEET=1.35, TOL=1.0;
+
+    if(dist<=REACH && forward>0.1 && angleDeg<=ARC){
+      const anglePenalty=(angleDeg/ARC)*48, distPenalty=(Math.abs(dist-SWEET)/TOL)*48;
+      let accuracy=100-anglePenalty-distPenalty;
+      accuracy=Math.max(4,Math.min(100,accuracy));
+      const damage=12+accuracy*0.36;
+      melon.integrity=Math.max(0,melon.integrity-damage);
+      melon.hits.push(accuracy);
+      sfxHit(accuracy);
+      lastEvent={type:'hit',seq:lastEvent.seq+1,accuracy};
+      if(accuracy>=85) showToast('パーン！会心の一撃！','good');
+      else if(accuracy>=60) showToast('ナイスヒット！','good');
+      else showToast('当たった…かすった感じ','good');
+    } else {
+      stats.misses++; sfxMiss();
+      lastEvent={type:'miss',seq:lastEvent.seq+1,accuracy:0};
+      showToast('スカッ！空振り','bad');
+    }
+  }
+
+  function updatePlayerPhysics(dt){
+    stats.time+=dt;
+    if(stats.stunned){
+      stats.stunTimer-=dt;
+      document.getElementById('fpvCanvas').classList.add('stunned');
+      if(stats.stunTimer<=0){ stats.stunned=false; document.getElementById('fpvCanvas').classList.remove('stunned'); }
+    }
+    if(!stats.stunned){
+      const fx=Math.sin(player.angle), fy=-Math.cos(player.angle);
+      let fwd=0; if(keys.w) fwd+=1; if(keys.s) fwd-=1;
+      const spd = fwd>=0?FORWARD_SPEED:BACK_SPEED;
+      player.x+=fx*spd*fwd*dt; player.y+=fy*spd*fwd*dt;
+      let turn=0; if(keys.d) turn+=1; if(keys.a) turn-=1;
+      turn = Math.max(-1,Math.min(1, turn+gyroTurn));
+      player.angle += turn*ROT_SPEED*dt;
+      player.x=Math.min(WORLD_W-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.x));
+      player.y=Math.min(WORLD_H-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.y));
+    }
+    if(!stats.stunned){
+      for(const h of holes){
+        const d=Math.hypot(player.x-h.x,player.y-h.y);
+        if(d<h.r*0.85){
+          stats.stunned=true; stats.stunTimer=1.3; sfxStumble();
+          lastEvent={type:'stumble',seq:lastEvent.seq+1,accuracy:0};
+          showToast('うわっ！穴にハマった…','bad');
+          const ang=Math.atan2(player.y-h.y,player.x-h.x);
+          player.x=h.x+Math.cos(ang)*(h.r+0.3); player.y=h.y+Math.sin(ang)*(h.r+0.3);
+          break;
+        }
+      }
+    }
+    if(swing.cooldown>0) swing.cooldown-=dt;
+    if(swing.phase!=='idle'){
+      swing.t+=dt;
+      const WINDUP=0.22, IMPACT=0.14, RECOVER=0.28;
+      if(swing.phase==='windup' && swing.t>=WINDUP){ swing.phase='impact'; swing.t=0; }
+      else if(swing.phase==='impact'){
+        if(!swing.hitDone){ swing.hitDone=true; resolveSwingHit(); }
+        if(swing.t>=IMPACT){ swing.phase='recover'; swing.t=0; }
+      } else if(swing.phase==='recover' && swing.t>=RECOVER){ swing.phase='idle'; swing.t=0; swing.cooldown=0.15; }
+    }
+    updatePlayerHUD();
+    if(gameState==='playing' && melon.integrity<=0) endGame();
+  }
+
+  function updatePlayerHUD(){
+    const melonFill=document.getElementById('melonFill'), melonLabel=document.getElementById('melonLabel');
+    const pct=Math.max(0,Math.round(melon.integrity));
+    melonFill.style.width=pct+'%'; melonLabel.textContent='スイカ耐久 '+pct+'%';
+    if(pct<30) melonFill.style.background='linear-gradient(90deg,#c0392b,#ff5a63)';
+    else if(pct<65) melonFill.style.background='linear-gradient(90deg,#c9a441,#f2c879)';
+    document.getElementById('statTime').textContent='⏱ '+stats.time.toFixed(1)+'s';
+    document.getElementById('statSwings').textContent='🏏 '+stats.swings+' スイング';
+  }
+
+  // ================= Rendering (shared by both roles) =================
+  const fpvCanvas=document.getElementById('fpvCanvas'), fctx=fpvCanvas.getContext('2d');
+  const topCanvas=document.getElementById('topCanvas'), tctx=topCanvas.getContext('2d');
+
+  function resizeCanvases(){
+    [[fpvCanvas],[topCanvas]].forEach(([c])=>{
+      const rect=c.parentElement.getBoundingClientRect();
+      c.width=Math.max(2,Math.floor(rect.width)); c.height=Math.max(2,Math.floor(rect.height));
+    });
+  }
+  window.addEventListener('resize', resizeCanvases);
+
+  function drawMelonSprite(ctx,cx,cy,size,integrity){
+    const r=size/2; ctx.save();
+    ctx.beginPath(); ctx.fillStyle='#2f8f4e'; ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#195e33'; ctx.lineWidth=Math.max(1,r*0.09);
+    for(let i=-2;i<=2;i++){
+      ctx.beginPath(); ctx.moveTo(cx+i*r*0.32,cy-r*0.95);
+      ctx.quadraticCurveTo(cx+i*r*0.5,cy,cx+i*r*0.32,cy+r*0.95); ctx.stroke();
+    }
+    if(integrity<70){
+      const cracks=integrity<35?5:3;
+      ctx.strokeStyle='rgba(255,90,99,0.9)'; ctx.lineWidth=Math.max(1,r*0.06);
+      for(let i=0;i<cracks;i++){
+        const a=(i/cracks)*Math.PI*2+integrity*0.02;
+        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(a)*r*0.9,cy+Math.sin(a)*r*0.9); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawFPV(p, m, hs){
+    const W=fpvCanvas.width, H=fpvCanvas.height, horizon=H*0.46;
+    const sky=fctx.createLinearGradient(0,0,0,horizon);
+    sky.addColorStop(0,'#241539'); sky.addColorStop(0.55,'#5a2a5e'); sky.addColorStop(1,'#ff7a54');
+    fctx.fillStyle=sky; fctx.fillRect(0,0,W,horizon);
+    fctx.beginPath(); fctx.fillStyle='rgba(255,230,170,0.85)'; fctx.arc(W*0.5,horizon*0.55,H*0.09,0,Math.PI*2); fctx.fill();
+    const sand=fctx.createLinearGradient(0,horizon,0,H);
+    sand.addColorStop(0,'#e0a95a'); sand.addColorStop(1,'#8a5f2c');
+    fctx.fillStyle=sand; fctx.fillRect(0,horizon,W,H-horizon);
+
+    const fx=Math.sin(p.angle), fy=-Math.cos(p.angle), rx=Math.cos(p.angle), ry=Math.sin(p.angle);
+    const PROJ_K=W*0.85;
+    function project(ox,oy){ const ddx=ox-p.x, ddy=oy-p.y; return {forward:ddx*fx+ddy*fy, side:ddx*rx+ddy*ry}; }
+
+    const drawables=[];
+    for(const h of hs){ const pr=project(h.x,h.y); if(pr.forward>0.25) drawables.push({type:'hole',obj:h,...pr}); }
+    const pm=project(m.x,m.y); if(pm.forward>0.15) drawables.push({type:'melon',obj:m,...pm});
+    drawables.sort((a,b)=>b.forward-a.forward);
+
+    for(const d of drawables){
+      const fwd=Math.max(0.4,d.forward);
+      const screenX=W/2+(d.side/fwd)*PROJ_K;
+      if(screenX<-W*0.3 || screenX>W*1.3) continue;
+      const groundY=horizon+Math.min(H-horizon,(H*0.62)/fwd);
+      if(d.type==='hole'){
+        const rw=Math.min(W*0.9,(d.obj.r*PROJ_K*1.6)/fwd), rh=rw*0.38;
+        fctx.beginPath(); fctx.fillStyle='rgba(20,12,8,0.85)'; fctx.ellipse(screenX,groundY,rw,rh,0,0,Math.PI*2); fctx.fill();
+      } else {
+        const size=Math.min(H*0.7,(d.obj.radius*PROJ_K*1.7)/fwd);
+        drawMelonSprite(fctx,screenX,groundY-size*0.35,size,d.obj.integrity);
+      }
+    }
+    const vg=fctx.createRadialGradient(W/2,H/2,H*0.15,W/2,H/2,H*0.75);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.55)');
+    fctx.fillStyle=vg; fctx.fillRect(0,0,W,H);
+  }
+
+  function drawTop(p, m, hs, swingPhase, stunned){
+    const W=topCanvas.width, H=topCanvas.height;
+    const marginX=W*0.06, marginY=H*0.06, usableW=W-marginX*2, usableH=H-marginY*2;
+    const sx=(wx)=>marginX+(wx/WORLD_W)*usableW, sy=(wy)=>marginY+(wy/WORLD_H)*usableH;
+    const scale=usableW/WORLD_W;
+    tctx.fillStyle='#f2cd7e'; tctx.fillRect(0,0,W,H);
+    tctx.strokeStyle='rgba(0,0,0,0.05)'; tctx.lineWidth=1;
+    for(let i=0;i<=WORLD_W;i+=2){ tctx.beginPath(); tctx.moveTo(sx(i),marginY); tctx.lineTo(sx(i),H-marginY); tctx.stroke(); }
+    for(let j=0;j<=WORLD_H;j+=2){ tctx.beginPath(); tctx.moveTo(marginX,sy(j)); tctx.lineTo(W-marginX,sy(j)); tctx.stroke(); }
+    tctx.strokeStyle='rgba(0,0,0,0.18)'; tctx.lineWidth=2; tctx.strokeRect(marginX,marginY,usableW,usableH);
+
+    for(const h of hs){
+      tctx.beginPath();
+      const grad=tctx.createRadialGradient(sx(h.x),sy(h.y),1,sx(h.x),sy(h.y),h.r*scale);
+      grad.addColorStop(0,'#2b1a10'); grad.addColorStop(1,'#7a4a1e');
+      tctx.fillStyle=grad; tctx.arc(sx(h.x),sy(h.y),h.r*scale,0,Math.PI*2); tctx.fill();
+      tctx.strokeStyle='rgba(0,0,0,0.35)'; tctx.lineWidth=2; tctx.stroke();
+    }
+    drawMelonSprite(tctx, sx(m.x), sy(m.y), Math.max(14,m.radius*scale*2), m.integrity);
+
+    const px=sx(p.x), py=sy(p.y), fovLen=1.15*scale;
+    const fovA=p.angle-0.45, fovB=p.angle+0.45;
+    tctx.beginPath(); tctx.moveTo(px,py);
+    tctx.lineTo(px+Math.sin(fovA)*fovLen, py-Math.cos(fovA)*fovLen);
+    tctx.lineTo(px+Math.sin(fovB)*fovLen, py-Math.cos(fovB)*fovLen);
+    tctx.closePath(); tctx.fillStyle = stunned?'rgba(255,107,107,0.35)':'rgba(18,97,94,0.28)'; tctx.fill();
+
+    tctx.save(); tctx.translate(px,py); tctx.rotate(p.angle);
+    tctx.beginPath(); tctx.moveTo(0,-11); tctx.lineTo(8,9); tctx.lineTo(-8,9); tctx.closePath();
+    tctx.fillStyle = stunned?'#ff6b6b':'#12615e'; tctx.fill();
+    tctx.strokeStyle='#fbf3e3'; tctx.lineWidth=2; tctx.stroke(); tctx.restore();
+
+    if(swingPhase==='impact'){
+      tctx.beginPath(); tctx.strokeStyle='rgba(255,90,99,0.8)'; tctx.lineWidth=3;
+      tctx.arc(px,py,2.35*scale, p.angle-0.9, p.angle+0.9); tctx.stroke();
+    }
+  }
+
+  // ================= Result screen =================
+  function computeGrade(hits){
+    const avg=hits.reduce((a,b)=>a+b,0)/Math.max(1,hits.length);
+    const last=hits[hits.length-1]||0;
+    const finalScore=Math.round(last*0.55+avg*0.45);
+    let grade,title,desc,color;
+    if(finalScore>=88){grade='S';title='パーフェクトスプリット！';desc='まん丸に、綺麗な一撃でした。';color='linear-gradient(135deg,#ffe08a,#ff9457)';}
+    else if(finalScore>=72){grade='A';title='見事な割れっぷり！';desc='ほぼ中心を捉えた綺麗な一撃。';color='linear-gradient(135deg,#7fe8c9,#5fc7ad)';}
+    else if(finalScore>=55){grade='B';title='なかなかの一撃！';desc='少しズレたけどしっかり割れた。';color='linear-gradient(135deg,#9fd3ff,#6aa8e0)';}
+    else if(finalScore>=35){grade='C';title='なんとか割れた…';desc='かなり端を捉えてしまったよう。';color='linear-gradient(135deg,#f2c879,#c99a3f)';}
+    else {grade='D';title='ぐちゃぐちゃ…';desc='粉々になってしまいました。';color='linear-gradient(135deg,#ff6b6b,#c0392b)';}
+    return {finalScore,grade,title,desc,color};
+  }
+  function showResult(hits, timeVal){
+    const r=computeGrade(hits);
+    document.getElementById('gradeCircle').textContent=r.grade;
+    document.getElementById('gradeCircle').style.background=r.color;
+    document.getElementById('gradeTitle').textContent=r.title;
+    document.getElementById('gradeDesc').textContent=r.desc;
+    document.getElementById('statAccuracy').textContent=r.finalScore+'%';
+    document.getElementById('statHits').textContent=hits.length;
+    document.getElementById('statFinalTime').textContent=timeVal.toFixed(1)+'s';
+    setTimeout(()=>{ document.getElementById('scrResult').classList.remove('hidden'); document.getElementById('gameView').classList.add('hidden'); }, 550);
+  }
+
+  function endGame(){
+    gameState='ended'; sfxBreak();
+    if(role==='player' && conn && conn.open){
+      try{ conn.send(buildLiveSnapshot(true)); }catch(e){}
+    }
+    showResult(melon.hits, stats.time);
+  }
+
+  // ================= Player role: input wiring =================
+  function bindHold(id, onDown, onUp){
+    const el=document.getElementById(id);
+    const down=(e)=>{ e.preventDefault(); onDown(); el.classList.add('active'); };
+    const up=(e)=>{ e.preventDefault(); onUp(); el.classList.remove('active'); };
+    el.addEventListener('touchstart', down, {passive:false});
+    el.addEventListener('touchend', up, {passive:false});
+    el.addEventListener('touchcancel', up, {passive:false});
+    el.addEventListener('mousedown', down);
+    el.addEventListener('mouseup', up);
+    el.addEventListener('mouseleave', up);
+  }
+  function initPlayerControls(){
+    bindHold('btnFwd', ()=>keys.w=true, ()=>keys.w=false);
+    bindHold('btnBack', ()=>keys.s=true, ()=>keys.s=false);
+    bindHold('btnLeft', ()=>keys.a=true, ()=>keys.a=false);
+    bindHold('btnRight', ()=>keys.d=true, ()=>keys.d=false);
+    const swingBtn=document.getElementById('btnSwing');
+    const tap=(e)=>{ e.preventDefault(); trySwing(); };
+    swingBtn.addEventListener('touchstart', tap, {passive:false});
+    swingBtn.addEventListener('mousedown', tap);
+
+    window.addEventListener('keydown',(e)=>{
+      if(gameState!=='playing'||role!=='player') return;
+      const k=e.key.toLowerCase();
+      if(k==='w'||k==='a'||k==='s'||k==='d'){ keys[k]=true; e.preventDefault(); }
+      if(k===' '||e.code==='Space'){ e.preventDefault(); trySwing(); }
+    });
+    window.addEventListener('keyup',(e)=>{
+      const k=e.key.toLowerCase(); if(k==='w'||k==='a'||k==='s'||k==='d') keys[k]=false;
+    });
+
+    const gyroToggle=document.getElementById('gyroToggle');
+    const gyroInvertRow=document.getElementById('gyroInvertRow');
+    const gyroInvert=document.getElementById('gyroInvert');
+    const gyroDebug=document.getElementById('gyroDebug');
+    let headingBaseline=null;
+    let lastSensorTime=0;
+    let sensorHandler=null;
+
+    gyroToggle.addEventListener('change', async ()=>{
+      if(!gyroToggle.checked){
+        gyroTurn=0; headingBaseline=null;
+        if(sensorHandler){ window.removeEventListener('deviceorientation', sensorHandler); window.removeEventListener('deviceorientationabsolute', sensorHandler); sensorHandler=null; }
+        gyroInvertRow.style.display='none'; gyroDebug.style.display='none';
+        return;
+      }
+      try{
+        if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
+          const res = await DeviceOrientationEvent.requestPermission();
+          if(res!=='granted'){ gyroToggle.checked=false; showToast('センサーの許可が得られませんでした','bad'); return; }
+        }
+        gyroInvertRow.style.display='flex'; gyroDebug.style.display='block';
+        gyroDebug.textContent='センサー待機中…';
+
+        sensorHandler = (e)=>{
+          if(e.alpha===null || e.beta===null || e.gamma===null) return;
+          lastSensorTime = performance.now();
+          const heading = getHeadingFromOrientation(e.alpha, e.beta, e.gamma);
+          if(headingBaseline===null) headingBaseline = heading;
+          let delta = heading - headingBaseline;
+          while(delta>Math.PI) delta-=Math.PI*2;
+          while(delta<-Math.PI) delta+=Math.PI*2;
+          const sign = gyroInvert.checked ? -1 : 1;
+          gyroTurn = Math.max(-1, Math.min(1, sign * delta / 0.7));
+          gyroDebug.textContent = 'α'+e.alpha.toFixed(0)+' β'+e.beta.toFixed(0)+' γ'+e.gamma.toFixed(0)+' turn'+gyroTurn.toFixed(2);
+        };
+        const useAbsolute = 'ondeviceorientationabsolute' in window;
+        window.addEventListener('deviceorientation', sensorHandler);
+        if(useAbsolute) window.addEventListener('deviceorientationabsolute', sensorHandler);
+
+        setTimeout(()=>{
+          if(gyroToggle.checked && performance.now()-lastSensorTime>1800){
+            gyroDebug.textContent='センサー値を受信できません(未対応/未許可の可能性)';
+            showToast('センサーが反応しません。ボタン操作をお使いください','bad');
+          }
+        }, 2000);
+      }catch(err){ gyroToggle.checked=false; showToast('センサーが使えませんでした','bad'); }
+    });
+  }
+
+  // Convert device orientation Euler angles (degrees) to a world-space heading (radians),
+  // correctly handling the phone being held upright (portrait, screen facing the user),
+  // not just raw gamma. Based on the standard W3C DeviceOrientation -> quaternion mapping.
+  function getHeadingFromOrientation(alphaDeg, betaDeg, gammaDeg){
+    const d2r = Math.PI/180;
+    const _z=alphaDeg*d2r, _x=betaDeg*d2r, _y=gammaDeg*d2r;
+    const cX=Math.cos(_x/2), cY=Math.cos(_y/2), cZ=Math.cos(_z/2);
+    const sX=Math.sin(_x/2), sY=Math.sin(_y/2), sZ=Math.sin(_z/2);
+    const qw = cX*cY*cZ - sX*sY*sZ;
+    const qx = sX*cY*cZ - cX*sY*sZ;
+    const qy = cX*sY*cZ + sX*cY*sZ;
+    const qz = cX*cY*sZ + sX*sY*cZ;
+    // screen-facing adjustment: -90deg rotation about X so "forward" points out of the screen
+    const ax=-Math.SQRT1_2, aw=Math.SQRT1_2;
+    const rw = qw*aw - qx*ax, rx = qw*ax + qx*aw, ry = qy*aw + qz*ax, rz = qz*aw - qy*ax;
+    // rotate forward vector (0,0,-1) by quaternion (rx,ry,rz,rw)
+    const vx=0, vy=0, vz=-1;
+    const tx = 2*(ry*vz - rz*vy), ty = 2*(rz*vx - rx*vz), tz = 2*(rx*vy - ry*vx);
+    const fx = vx + rw*tx + (ry*tz - rz*ty);
+    const fz = vz + rw*tz + (rx*ty - ry*tx);
+    return Math.atan2(fx, fz);
+  }
+
+  // ================= Networking: live state =================
+  function buildLiveSnapshot(ended){
+    return {
+      x:player.x, y:player.y, angle:player.angle,
+      integrity:melon.integrity, hits:melon.hits,
+      swingPhase:swing.phase, stunned:stats.stunned,
+      time:stats.time, swings:stats.swings, misses:stats.misses,
+      lastEvent, ended: !!ended, ts: Date.now()
+    };
+  }
+
+  // ================= Main loop =================
+  let lastT=null, netPlayer=null, netMelon=null, netHoles=null;
+  let renderP={x:0,y:0,angle:0};
+  let seenEventSeq=0;
+
+  function loop(ts){
+    if(lastT===null) lastT=ts;
+    const dt=Math.min(0.05,(ts-lastT)/1000); lastT=ts;
+
+    if(gameState==='playing' && role==='player'){
+      updatePlayerPhysics(dt);
+      drawFPV(player, melon, holes);
+    }
+    if(gameState==='playing' && role==='spotter' && netPlayer){
+      renderP.x += (netPlayer.x-renderP.x)*0.55;
+      renderP.y += (netPlayer.y-renderP.y)*0.55;
+      let da = netPlayer.angle-renderP.angle;
+      while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+      renderP.angle += da*0.55;
+      drawTop(renderP, netMelon||{x:10,y:10,radius:0.85,integrity:100}, netHoles||[], netPlayer.swingPhase, netPlayer.stunned);
+      document.getElementById('distanceReadout').textContent = '距離 '+Math.hypot((netMelon?netMelon.x:0)-netPlayer.x,(netMelon?netMelon.y:0)-netPlayer.y).toFixed(1)+' m';
+      document.getElementById('melonReadout').textContent = '耐久 '+Math.max(0,Math.round(netPlayer.integrity))+'%';
+
+      if(netPlayer.lastEvent && netPlayer.lastEvent.seq>seenEventSeq){
+        seenEventSeq=netPlayer.lastEvent.seq;
+        const ev=netPlayer.lastEvent;
+        if(ev.type==='hit'){ sfxHit(ev.accuracy); showToast(ev.accuracy>=85?'パーン！会心の一撃！':'ナイスヒット！','good'); }
+        else if(ev.type==='miss'){ sfxMiss(); showToast('空振り！','bad'); }
+        else if(ev.type==='stumble'){ sfxStumble(); showToast('穴にハマった！','bad'); }
+      }
+      if(netPlayer.ended){
+        gameState='ended'; sfxBreak(); showResult(netMelon&&netMelon.hits?netMelon.hits:(netPlayer.hits||[]), netPlayer.time);
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ================= Flow: role select =================
+  document.getElementById('pickPlayer').addEventListener('click', ()=>startHostFlow());
+  document.getElementById('pickSpotter').addEventListener('click', ()=>{ showScreen('scrJoin'); document.getElementById('joinCodeInput').focus(); });
+
+  async function startHostFlow(){
+    role='player'; ensureAudio();
+    showScreen('scrHost');
+    document.getElementById('hostStartBtn').disabled = true;
+    document.getElementById('hostWaitStatus').innerHTML = '<span class="spinner"></span>接続準備中…';
+    teardownPeer();
+    openHostPeer();
+  }
+
+  function openHostPeer(){
+    roomCode = genCode();
+    document.getElementById('hostCodeDisplay').textContent = roomCode;
+    document.getElementById('hostWaitStatus').innerHTML = '<span class="spinner"></span>観測者の参加を待っています…';
+
+    peer = new Peer(PEER_PREFIX+roomCode);
+    peer.on('open', ()=>{});
+    peer.on('connection', (c)=>{
+      conn = c;
+      conn.on('open', ()=>{
+        document.getElementById('hostWaitStatus').textContent='✅ 観測者が接続しました！';
+        document.getElementById('hostStartBtn').disabled = false;
+      });
+      conn.on('close', ()=>{ showToast('観測者との接続が切れました','bad'); });
+    });
+    peer.on('error', (err)=>{
+      if(err.type==='unavailable-id'){ openHostPeer(); }
+      else{ document.getElementById('hostWaitStatus').textContent='接続エラー: '+err.type; }
+    });
+  }
+
+  document.getElementById('hostBackBtn').addEventListener('click', ()=>{ teardownPeer(); showScreen('scrRole'); });
+  document.getElementById('hostSoloBtn').addEventListener('click', ()=>{ document.getElementById('hostStartBtn').disabled=false; beginPlayerGame(); });
+  document.getElementById('hostStartBtn').addEventListener('click', ()=> beginPlayerGame());
+
+  async function beginPlayerGame(){
+    buildWorld();
+    gameState='playing';
+    initPlayerControls();
+    document.getElementById('playerPanel').classList.remove('hidden');
+    document.getElementById('spotterPanel').classList.add('hidden');
+    showGame();
+    resizeCanvases();
+    lastT=null;
+    if(conn && conn.open){
+      try{ conn.send({type:'world', melon:{x:melon.x,y:melon.y,radius:melon.radius}, holes}); }catch(e){}
+    }
+    const t = setInterval(()=>{
+      if(gameState==='playing' && conn && conn.open){
+        try{ conn.send(Object.assign({type:'state'}, buildLiveSnapshot(false))); }catch(e){}
+      }
+    }, 90);
+    timers.push(t);
+  }
+
+  // ================= Flow: spotter =================
+  const joinInput=document.getElementById('joinCodeInput');
+  joinInput.addEventListener('input', ()=>{ joinInput.value = joinInput.value.toUpperCase().replace(/[^A-Z0-9]/g,''); });
+  document.getElementById('joinBackBtn').addEventListener('click', ()=>{ clearTimers(); teardownPeer(); showScreen('scrRole'); });
+  document.getElementById('joinWaitBackBtn').addEventListener('click', ()=>{ clearTimers(); teardownPeer(); showScreen('scrRole'); });
+
+  document.getElementById('joinBtn').addEventListener('click', ()=>{
+    ensureAudio();
+    const code = joinInput.value.trim().toUpperCase();
+    const errEl = document.getElementById('joinErr');
+    errEl.textContent='';
+    if(code.length!==4){ errEl.textContent='4桁のコードを入力してください。'; return; }
+    document.getElementById('joinBtn').disabled = true;
+    teardownPeer();
+    peer = new Peer();
+    let settled = false;
+    const failTimeout = setTimeout(()=>{
+      if(!settled){ settled=true; errEl.textContent='接続できませんでした。コードを確認してもう一度お試しください。'; document.getElementById('joinBtn').disabled=false; teardownPeer(); }
+    }, 8000);
+
+    peer.on('open', ()=>{
+      conn = peer.connect(PEER_PREFIX+code, {reliable:false});
+      conn.on('open', ()=>{
+        if(settled) return; settled=true; clearTimeout(failTimeout);
+        role='spotter'; roomCode=code;
+        document.getElementById('joinBtn').disabled=false;
+        showScreen('scrJoinWait');
+        beginSpotterGame();
+      });
+      conn.on('data', handleSpotterData);
+      conn.on('close', ()=>{ showToast('プレイヤーとの接続が切れました','bad'); });
+    });
+    peer.on('error', (err)=>{
+      if(settled) return; settled=true; clearTimeout(failTimeout);
+      document.getElementById('joinBtn').disabled=false;
+      if(err.type==='peer-unavailable') errEl.textContent='コードが見つかりません。プレイヤー側の画面を確認してください。';
+      else errEl.textContent='接続エラー: '+err.type;
+      teardownPeer();
+    });
+  });
+
+  function handleSpotterData(msg){
+    if(!msg || !msg.type) return;
+    if(msg.type==='world'){
+      netMelon = Object.assign({integrity:100, hits:[]}, msg.melon);
+      netHoles = msg.holes || [];
+      renderP = {x:WORLD_W/2, y:WORLD_H-3.2, angle:0};
+      if(gameState!=='playing'){
+        gameState='playing';
+        document.getElementById('spotterPanel').classList.remove('hidden');
+        document.getElementById('playerPanel').classList.add('hidden');
+        showGame(); resizeCanvases(); lastT=null; seenEventSeq=0;
+      }
+    } else if(msg.type==='state'){
+      netPlayer = msg;
+      if(netMelon){ netMelon.integrity = msg.integrity; if(msg.hits) netMelon.hits = msg.hits; }
+    }
+  }
+
+  async function beginSpotterGame(){
+    // Game view opens once the first 'world' message arrives (see handleSpotterData).
+    // Until then, keep the "waiting for player" screen visible.
+  }
+
+  // ================= Retry =================
+  document.getElementById('retryBtn').addEventListener('click', ()=>{
+    clearTimers(); teardownPeer();
+    document.getElementById('scrResult').classList.add('hidden');
+    role=null; roomCode=null; netPlayer=null; netMelon=null; netHoles=null; gameState='idle';
+    showScreen('scrRole');
+  });
+
+  resizeCanvases();
+})();
+</script>
+</body>
+</html>
