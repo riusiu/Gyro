@@ -281,9 +281,12 @@
     </div>
     <div class="panel hidden" id="ghostSpotterPanel">
       <video id="remoteVideo" autoplay playsinline muted style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000;"></video>
-      <canvas id="ghostOverlayCanvas" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
       <div class="tag spotter"><span class="dot"></span>観測者ビュー(カメラ映像)</div>
       <div class="toast" id="ghostSpotterToast">-</div>
+      <div style="position:absolute; right:16px; bottom:calc(100px + env(safe-area-inset-bottom)); text-align:center; z-index:6;">
+        <div style="font-size:10.5px; color:var(--text-dim); background:rgba(18,11,23,.7); border-radius:8px; padding:3px 8px; margin-bottom:4px; display:inline-block;">👻レーダー(相対方向)</div><br>
+        <canvas id="ghostOverlayCanvas" style="width:150px; height:150px; border-radius:50%; background:rgba(12,8,20,0.6); border:2px solid rgba(143,127,232,0.5); box-shadow:0 8px 20px rgba(0,0,0,0.4);"></canvas>
+      </div>
       <div class="spotter-hud">
         <div class="legend"><span><i style="background:#8f7fe8"></i>ゆうれい</span></div>
         <div class="readout-stack">
@@ -863,26 +866,38 @@
   function drawGhostOverlay(){
     const canvas = document.getElementById('ghostOverlayCanvas');
     if(!canvas) return;
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const w = Math.max(2,Math.floor(rect.width)), h = Math.max(2,Math.floor(rect.height));
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(2,Math.round(rect.width)), h = Math.max(2,Math.round(rect.height));
     if(canvas.width!==w) canvas.width=w;
     if(canvas.height!==h) canvas.height=h;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.clearRect(0,0,w,h);
+    const cx=w/2, cy=h/2, R=Math.min(w,h)/2-16;
+
+    // rings
+    ctx.strokeStyle='rgba(255,255,255,0.16)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,R*0.55,0,Math.PI*2); ctx.stroke();
+
+    // "facing" marker at top = the direction the phone is currently pointed
+    ctx.beginPath();
+    ctx.moveTo(cx,cy-R-9); ctx.lineTo(cx-6,cy-R+5); ctx.lineTo(cx+6,cy-R+5); ctx.closePath();
+    ctx.fillStyle='rgba(127,232,201,0.95)'; ctx.fill();
+    ctx.font=(R*0.16)+'px sans-serif'; ctx.fillStyle='rgba(127,232,201,0.85)';
+    ctx.textAlign='center'; ctx.fillText('いま向いている方向', cx, cy-R-16);
+
     if(!netGhosts) return;
     for(const g of netGhosts){
       if(g.captured) continue;
       let diff = g.heading - netGhostPlayerHeading;
       while(diff>Math.PI) diff-=Math.PI*2;
       while(diff<-Math.PI) diff+=Math.PI*2;
-      if(Math.abs(diff) > GHOST_OVERLAY_FOV/2) continue;
-      const sx = canvas.width/2 + (diff/(GHOST_OVERLAY_FOV/2))*(canvas.width/2)*0.92;
-      const sy = canvas.height*(g.vy!==undefined?g.vy:0.5);
-      const size = canvas.width*0.1;
-      ctx.font = size+'px sans-serif';
+      const gx = cx + Math.sin(diff)*R*0.8;
+      const gy = cy - Math.cos(diff)*R*0.8;
+      ctx.font = Math.round(R*0.34)+'px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.shadowColor='rgba(143,127,232,0.95)'; ctx.shadowBlur=Math.max(10,size*0.4);
-      ctx.fillText('👻', sx, sy);
+      ctx.shadowColor='rgba(143,127,232,0.95)'; ctx.shadowBlur=8;
+      ctx.fillText('👻', gx, gy);
       ctx.shadowBlur=0;
     }
   }
