@@ -163,8 +163,8 @@
   <!-- Host: show code / wait for spotter -->
   <div class="screen hidden" id="scrHost">
     <div class="card">
-      <h1 class="display">合言葉を伝えよう</h1>
-      <p class="sub">このコードを観測者側の端末に入力してもらってください。</p>
+      <h1 class="display" id="hostHeading">合言葉を伝えよう</h1>
+      <p class="sub" id="hostSub">このコードを観測者側の端末に入力してもらってください。</p>
       <div class="code-box"><div class="label">ROOM CODE</div><div class="code mono" id="hostCodeDisplay">----</div></div>
       <div class="status-line" id="hostWaitStatus"><span class="spinner"></span>観測者の参加を待っています…</div>
       <button class="btn" id="hostStartBtn" disabled>目隠しをつけてスタート</button>
@@ -188,8 +188,8 @@
   <!-- Spotter: waiting for host to start -->
   <div class="screen hidden" id="scrJoinWait">
     <div class="card">
-      <h1 class="display">接続しました！</h1>
-      <p class="sub">プレイヤー側の準備が終わるのを待っています。目隠しをつけてもらいましょう。</p>
+      <h1 class="display" id="joinWaitHeading">接続しました！</h1>
+      <p class="sub" id="joinWaitSub">プレイヤー側の準備が終わるのを待っています。目隠しをつけてもらいましょう。</p>
       <div class="status-line"><span class="spinner"></span>プレイヤー開始待ち…</div>
       <button class="btn ghost" id="joinWaitBackBtn">役割選択に戻る</button>
     </div>
@@ -258,6 +258,7 @@
   // ================= PeerJS (WebRTC) helpers =================
   const PEER_PREFIX = 'suikawari5-';
   let peer = null, conn = null;
+  let controlsInitialized = false;
   function genCode(){
     const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     let c=''; for(let i=0;i<4;i++) c+=chars[Math.floor(Math.random()*chars.length)];
@@ -796,7 +797,7 @@
   async function beginPlayerGame(){
     buildWorld();
     gameState='playing';
-    initPlayerControls();
+    if(!controlsInitialized){ initPlayerControls(); controlsInitialized=true; }
     document.getElementById('playerPanel').classList.remove('hidden');
     document.getElementById('spotterPanel').classList.add('hidden');
     showGame();
@@ -877,12 +878,27 @@
     // Until then, keep the "waiting for player" screen visible.
   }
 
-  // ================= Retry =================
+  // ================= Retry (loop back to Title, keep connection alive) =================
   document.getElementById('retryBtn').addEventListener('click', ()=>{
-    clearTimers(); teardownPeer();
+    clearTimers(); // stop the old per-round state-sender interval; a fresh one starts on next beginPlayerGame()
     document.getElementById('scrResult').classList.add('hidden');
-    role=null; roomCode=null; netPlayer=null; netMelon=null; netHoles=null; gameState='idle';
-    showScreen('scrRole');
+    netPlayer=null; netMelon=null; netHoles=null; gameState='idle';
+
+    if(role==='player'){
+      document.getElementById('hostHeading').textContent = '🍉 目隠しスイカ割り';
+      document.getElementById('hostSub').textContent = '準備ができたら、下のボタンでもう一度スタートできます。';
+      document.getElementById('hostWaitStatus').textContent = (conn && conn.open) ? '✅ 観測者と接続中です' : '(観測者なし・ソロモード)';
+      document.getElementById('hostStartBtn').disabled = false;
+      showScreen('scrHost');
+    } else if(role==='spotter'){
+      seenEventSeq = 0;
+      document.getElementById('joinWaitHeading').textContent = '🍉 目隠しスイカ割り';
+      document.getElementById('joinWaitSub').textContent = '次のラウンドが始まるのを待っています。';
+      showScreen('scrJoinWait');
+    } else {
+      teardownPeer(); role=null; roomCode=null;
+      showScreen('scrRole');
+    }
   });
 
   resizeCanvases();
