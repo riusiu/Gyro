@@ -312,7 +312,7 @@
   function sfxBreak(){ [0,0.08,0.16,0.28].forEach((d,i)=>beep(260-i*30,0.3,'square',0.22,d)); beep(880,0.5,'sine',0.15,0.3); beep(1100,0.6,'sine',0.12,0.4); }
 
   // ================= World / game state =================
-  const WORLD_W=20, WORLD_H=20;
+  const WORLD_W=20, WORLD_H=20, TIME_LIMIT=60;
   let player, melon, holes, keys, swing, stats, gameState='idle';
   let lastEvent = {type:null, seq:0, accuracy:0};
 
@@ -331,7 +331,7 @@
     }
     keys={w:false,a:false,s:false,d:false};
     swing={phase:'idle',t:0,cooldown:0};
-    stats={time:0,swings:0,misses:0,stunned:false,stunTimer:0};
+    stats={time:TIME_LIMIT, elapsed:0, swings:0, misses:0, stunned:false, stunTimer:0};
     lastEvent={type:null,seq:0,accuracy:0};
   }
 
@@ -344,7 +344,7 @@
 
   // ================= Player-side physics =================
   const FORWARD_SPEED=3.3, BACK_SPEED=1.9, ROT_SPEED=2.5, WORLD_MARGIN=0.6;
-  let gyroTurn = 0;
+  let gyroDelta = 0, gyroActive = false, playerAngleBaseline = 0;
 
   function trySwing(){
     if(stats.stunned || swing.phase!=='idle' || swing.cooldown>0) return;
@@ -368,8 +368,7 @@
       const anglePenalty=(angleDeg/ARC)*48, distPenalty=(Math.abs(dist-SWEET)/TOL)*48;
       let accuracy=100-anglePenalty-distPenalty;
       accuracy=Math.max(4,Math.min(100,accuracy));
-      const damage=12+accuracy*0.36;
-      melon.integrity=Math.max(0,melon.integrity-damage);
+      melon.integrity=0;
       melon.hits.push(accuracy);
       sfxHit(accuracy);
       lastEvent={type:'hit',seq:lastEvent.seq+1,accuracy};
@@ -384,7 +383,9 @@
   }
 
   function updatePlayerPhysics(dt){
-    stats.time+=dt;
+    stats.elapsed+=dt;
+    stats.time-=dt;
+    if(stats.time<=0 && gameState==='playing'){ stats.time=0; endGame('timeout'); return; }
     if(stats.stunned){
       stats.stunTimer-=dt;
       document.getElementById('fpvCanvas').classList.add('stunned');
@@ -396,8 +397,12 @@
       const spd = fwd>=0?FORWARD_SPEED:BACK_SPEED;
       player.x+=fx*spd*fwd*dt; player.y+=fy*spd*fwd*dt;
       let turn=0; if(keys.d) turn+=1; if(keys.a) turn-=1;
-      turn = Math.max(-1,Math.min(1, turn+gyroTurn));
-      player.angle += turn*ROT_SPEED*dt;
+      if(gyroActive){
+        playerAngleBaseline += turn*ROT_SPEED*dt;
+        player.angle = playerAngleBaseline + gyroDelta;
+      } else {
+        player.angle += turn*ROT_SPEED*dt;
+      }
       player.x=Math.min(WORLD_W-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.x));
       player.y=Math.min(WORLD_H-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.y));
     }
@@ -425,7 +430,7 @@
       } else if(swing.phase==='recover' && swing.t>=RECOVER){ swing.phase='idle'; swing.t=0; swing.cooldown=0.15; }
     }
     updatePlayerHUD();
-    if(gameState==='playing' && melon.integrity<=0) endGame();
+    if(gameState==='playing' && melon.integrity<=0) endGame('broken');
   }
 
   function updatePlayerHUD(){
@@ -434,7 +439,7 @@
     melonFill.style.width=pct+'%'; melonLabel.textContent='スイカ耐久 '+pct+'%';
     if(pct<30) melonFill.style.background='linear-gradient(90deg,#c0392b,#ff5a63)';
     else if(pct<65) melonFill.style.background='linear-gradient(90deg,#c9a441,#f2c879)';
-    document.getElementById('statTime').textContent='⏱ '+stats.time.toFixed(1)+'s';
+    document.getElementById('statTime').textContent='⏱ 残り'+Math.ceil(stats.time)+'s';
     document.getElementById('statSwings').textContent='🏏 '+stats.swings+' スイング';
   }
 
@@ -557,7 +562,18 @@
     else {grade='D';title='ぐちゃぐちゃ…';desc='粉々になってしまいました。';color='linear-gradient(135deg,#ff6b6b,#c0392b)';}
     return {finalScore,grade,title,desc,color};
   }
-  function showResult(hits, timeVal){
+  function showResult(hits, elapsedVal, timedOut){
+    if(timedOut && hits.length===0){
+      document.getElementById('gradeCircle').textContent='⏰';
+      document.getElementById('gradeCircle').style.background='linear-gradient(135deg,#9aa5b1,#5c6672)';
+      document.getElementById('gradeTitle').textContent='タイムアップ…';
+      document.getElementById('gradeDesc').textContent='制限時間内にスイカに当てられませんでした。';
+      document.getElementById('statAccuracy').textContent='--';
+      document.getElementById('statHits').textContent='0';
+      document.getElementById('statFinalTime').textContent=TIME_LIMIT+'s';
+      setTimeout(()=>{ document.getElementById('scrResult').classList.remove('hidden'); document.getElementById('gameView').classList.add('hidden'); }, 550);
+      return;
+    }
     const r=computeGrade(hits);
     document.getElementById('gradeCircle').textContent=r.grade;
     document.getElementById('gradeCircle').style.background=r.color;
@@ -565,16 +581,18 @@
     document.getElementById('gradeDesc').textContent=r.desc;
     document.getElementById('statAccuracy').textContent=r.finalScore+'%';
     document.getElementById('statHits').textContent=hits.length;
-    document.getElementById('statFinalTime').textContent=timeVal.toFixed(1)+'s';
+    document.getElementById('statFinalTime').textContent=elapsedVal.toFixed(1)+'s';
     setTimeout(()=>{ document.getElementById('scrResult').classList.remove('hidden'); document.getElementById('gameView').classList.add('hidden'); }, 550);
   }
 
-  function endGame(){
-    gameState='ended'; sfxBreak();
+  function endGame(reason){
+    gameState='ended';
+    const timedOut = reason==='timeout';
+    if(timedOut) sfxMiss(); else sfxBreak();
     if(role==='player' && conn && conn.open){
-      try{ conn.send(buildLiveSnapshot(true)); }catch(e){}
+      try{ conn.send(Object.assign({type:'state'}, buildLiveSnapshot(true), {timedOut})); }catch(e){}
     }
-    showResult(melon.hits, stats.time);
+    showResult(melon.hits, stats.elapsed, timedOut);
   }
 
   // ================= Player role: input wiring =================
@@ -616,11 +634,12 @@
     let headingBaseline=null;
     let lastSensorTime=0;
     let sensorHandler=null;
+    let sensorEventName=null;
 
     gyroToggle.addEventListener('change', async ()=>{
       if(!gyroToggle.checked){
-        gyroTurn=0; headingBaseline=null;
-        if(sensorHandler){ window.removeEventListener('deviceorientation', sensorHandler); window.removeEventListener('deviceorientationabsolute', sensorHandler); sensorHandler=null; }
+        gyroActive=false; gyroDelta=0; headingBaseline=null;
+        if(sensorHandler && sensorEventName){ window.removeEventListener(sensorEventName, sensorHandler); sensorHandler=null; }
         gyroInvertRow.style.display='none'; gyroDebug.style.display='none';
         return;
       }
@@ -631,7 +650,12 @@
         }
         gyroInvertRow.style.display='flex'; gyroDebug.style.display='block';
         gyroDebug.textContent='センサー待機中…';
+        playerAngleBaseline = player.angle; headingBaseline=null; gyroDelta=0; gyroActive=true;
 
+        // Prefer the absolute/compass-referenced event when available (more stable, less drift).
+        // Listening to both event types at once was the bug: they can disagree and fight,
+        // which looked like constant spinning.
+        sensorEventName = ('ondeviceorientationabsolute' in window) ? 'deviceorientationabsolute' : 'deviceorientation';
         sensorHandler = (e)=>{
           if(e.alpha===null || e.beta===null || e.gamma===null) return;
           lastSensorTime = performance.now();
@@ -640,13 +664,12 @@
           let delta = heading - headingBaseline;
           while(delta>Math.PI) delta-=Math.PI*2;
           while(delta<-Math.PI) delta+=Math.PI*2;
+          if(Math.abs(delta) < 0.035) delta = 0; // dead zone ~2deg to kill jitter
           const sign = gyroInvert.checked ? -1 : 1;
-          gyroTurn = Math.max(-1, Math.min(1, sign * delta / 0.7));
-          gyroDebug.textContent = 'α'+e.alpha.toFixed(0)+' β'+e.beta.toFixed(0)+' γ'+e.gamma.toFixed(0)+' turn'+gyroTurn.toFixed(2);
+          gyroDelta = sign * delta;
+          gyroDebug.textContent = 'α'+e.alpha.toFixed(0)+' β'+e.beta.toFixed(0)+' γ'+e.gamma.toFixed(0)+' Δ'+(gyroDelta*180/Math.PI).toFixed(0)+'°';
         };
-        const useAbsolute = 'ondeviceorientationabsolute' in window;
-        window.addEventListener('deviceorientation', sensorHandler);
-        if(useAbsolute) window.addEventListener('deviceorientationabsolute', sensorHandler);
+        window.addEventListener(sensorEventName, sensorHandler);
 
         setTimeout(()=>{
           if(gyroToggle.checked && performance.now()-lastSensorTime>1800){
@@ -687,7 +710,7 @@
       x:player.x, y:player.y, angle:player.angle,
       integrity:melon.integrity, hits:melon.hits,
       swingPhase:swing.phase, stunned:stats.stunned,
-      time:stats.time, swings:stats.swings, misses:stats.misses,
+      time:stats.time, elapsed:stats.elapsed, swings:stats.swings, misses:stats.misses,
       lastEvent, ended: !!ended, ts: Date.now()
     };
   }
@@ -713,7 +736,7 @@
       renderP.angle += da*0.55;
       drawTop(renderP, netMelon||{x:10,y:10,radius:0.85,integrity:100}, netHoles||[], netPlayer.swingPhase, netPlayer.stunned);
       document.getElementById('distanceReadout').textContent = '距離 '+Math.hypot((netMelon?netMelon.x:0)-netPlayer.x,(netMelon?netMelon.y:0)-netPlayer.y).toFixed(1)+' m';
-      document.getElementById('melonReadout').textContent = '耐久 '+Math.max(0,Math.round(netPlayer.integrity))+'%';
+      document.getElementById('melonReadout').textContent = '耐久 '+Math.max(0,Math.round(netPlayer.integrity))+'% / 残り'+Math.ceil(netPlayer.time)+'s';
 
       if(netPlayer.lastEvent && netPlayer.lastEvent.seq>seenEventSeq){
         seenEventSeq=netPlayer.lastEvent.seq;
@@ -723,7 +746,9 @@
         else if(ev.type==='stumble'){ sfxStumble(); showToast('穴にハマった！','bad'); }
       }
       if(netPlayer.ended){
-        gameState='ended'; sfxBreak(); showResult(netMelon&&netMelon.hits?netMelon.hits:(netPlayer.hits||[]), netPlayer.time);
+        gameState='ended';
+        if(netPlayer.timedOut) sfxMiss(); else sfxBreak();
+        showResult(netMelon&&netMelon.hits?netMelon.hits:(netPlayer.hits||[]), netPlayer.elapsed||0, !!netPlayer.timedOut);
       }
     }
     requestAnimationFrame(loop);
