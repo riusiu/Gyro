@@ -686,13 +686,19 @@
   // not just raw gamma. Based on the standard W3C DeviceOrientation -> quaternion mapping.
   function getHeadingFromOrientation(alphaDeg, betaDeg, gammaDeg){
     const d2r = Math.PI/180;
-    const _z=alphaDeg*d2r, _x=betaDeg*d2r, _y=gammaDeg*d2r;
-    const cX=Math.cos(_x/2), cY=Math.cos(_y/2), cZ=Math.cos(_z/2);
-    const sX=Math.sin(_x/2), sY=Math.sin(_y/2), sZ=Math.sin(_z/2);
-    const qw = cX*cY*cZ - sX*sY*sZ;
-    const qx = sX*cY*cZ - cX*sY*sZ;
-    const qy = cX*sY*cZ + sX*cY*sZ;
-    const qz = cX*cY*sZ + sX*sY*cZ;
+    // Standard device-orientation -> quaternion construction (as used by WebXR/AR
+    // "hold the phone like a window" controls): Euler angles applied in YXZ order
+    // as (x=beta, y=alpha, z=-gamma). This is the piece that was wrong before —
+    // isolating yaw (turning your body left/right) from pitch (tilting the phone
+    // forward/back) requires this specific axis order, not a straight Z-X-Y compose.
+    const x = betaDeg*d2r, y = alphaDeg*d2r, z = -gammaDeg*d2r;
+    const c1=Math.cos(x/2), s1=Math.sin(x/2);
+    const c2=Math.cos(y/2), s2=Math.sin(y/2);
+    const c3=Math.cos(z/2), s3=Math.sin(z/2);
+    const qx = s1*c2*c3 + c1*s2*s3;
+    const qy = c1*s2*c3 - s1*c2*s3;
+    const qz = c1*c2*s3 - s1*s2*c3;
+    const qw = c1*c2*c3 + s1*s2*s3;
     // screen-facing adjustment: -90deg rotation about X so "forward" points out of the screen
     const ax=-Math.SQRT1_2, aw=Math.SQRT1_2;
     const rw = qw*aw - qx*ax, rx = qw*ax + qx*aw, ry = qy*aw + qz*ax, rz = qz*aw - qy*ax;
