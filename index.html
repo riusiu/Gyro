@@ -211,8 +211,8 @@
         <div class="ctrl-btn" id="btnFwd">▲<br>前進</div>
         <div class="ctrl-btn" id="btnSwing">たたく！</div>
       </div>
-      <label class="gyro-toggle" style="top:calc(46px + env(safe-area-inset-top));"><input type="checkbox" id="gyroToggle">向きで回転(任意)</label>
-      <label class="gyro-toggle" id="gyroInvertRow" style="top:calc(72px + env(safe-area-inset-top)); display:none;"><input type="checkbox" id="gyroInvert">回転が逆なら反転</label>
+      <label class="gyro-toggle" style="top:calc(46px + env(safe-area-inset-top));"><input type="checkbox" id="gyroToggle" checked>向きで回転(任意)</label>
+      <label class="gyro-toggle" id="gyroInvertRow" style="top:calc(72px + env(safe-area-inset-top));"><input type="checkbox" id="gyroInvert" checked>回転が逆なら反転</label>
       <div class="gyro-toggle" id="gyroDebug" style="top:calc(98px + env(safe-area-inset-top)); display:none; font-family:'JetBrains Mono',monospace;"></div>
     </div>
 
@@ -627,13 +627,7 @@
     let sensorHandler=null;
     let sensorEventName=null;
 
-    gyroToggle.addEventListener('change', async ()=>{
-      if(!gyroToggle.checked){
-        gyroActive=false; gyroDelta=0; headingBaseline=null;
-        if(sensorHandler && sensorEventName){ window.removeEventListener(sensorEventName, sensorHandler); sensorHandler=null; }
-        gyroInvertRow.style.display='none'; gyroDebug.style.display='none';
-        return;
-      }
+    async function enableGyro(){
       try{
         if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
           const res = await DeviceOrientationEvent.requestPermission();
@@ -669,7 +663,16 @@
           }
         }, 2000);
       }catch(err){ gyroToggle.checked=false; showToast('センサーが使えませんでした','bad'); }
+    }
+    function disableGyro(){
+      gyroActive=false; gyroDelta=0; headingBaseline=null;
+      if(sensorHandler && sensorEventName){ window.removeEventListener(sensorEventName, sensorHandler); sensorHandler=null; }
+      gyroInvertRow.style.display='none'; gyroDebug.style.display='none';
+    }
+    gyroToggle.addEventListener('change', ()=>{
+      if(gyroToggle.checked) enableGyro(); else disableGyro();
     });
+    window._enableGyroIfChecked = ()=>{ if(gyroToggle.checked && !gyroActive) enableGyro(); };
   }
 
   // Convert device orientation Euler angles (degrees) to a world-space heading (radians),
@@ -787,8 +790,8 @@
   }
 
   document.getElementById('hostBackBtn').addEventListener('click', ()=>{ teardownPeer(); showScreen('scrRole'); });
-  document.getElementById('hostSoloBtn').addEventListener('click', ()=>{ document.getElementById('hostStartBtn').disabled=false; beginPlayerGame(); });
-  document.getElementById('hostStartBtn').addEventListener('click', ()=> beginPlayerGame());
+  document.getElementById('hostSoloBtn').addEventListener('click', ()=>{ document.getElementById('hostStartBtn').disabled=false; beginPlayerGame(); if(window._enableGyroIfChecked) window._enableGyroIfChecked(); });
+  document.getElementById('hostStartBtn').addEventListener('click', ()=>{ beginPlayerGame(); if(window._enableGyroIfChecked) window._enableGyroIfChecked(); });
 
   async function beginPlayerGame(){
     buildWorld();
