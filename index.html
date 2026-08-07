@@ -105,10 +105,7 @@
     border-radius:16px; background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.22);
     color:var(--text); font-family:'Baloo 2',sans-serif; font-weight:700; font-size:13px; user-select:none;}
   .ctrl-btn:active, .ctrl-btn.active{background:rgba(255,255,255,.24);}
-  #btnFwd{width:74px; height:64px; left:calc(16px + env(safe-area-inset-left)); bottom:calc(122px + env(safe-area-inset-bottom));}
-  #btnBack{width:74px; height:46px; left:calc(16px + env(safe-area-inset-left)); bottom:calc(52px + env(safe-area-inset-bottom)); opacity:.85;}
-  #btnLeft{width:56px; height:56px; left:calc(96px + env(safe-area-inset-left)); bottom:calc(56px + env(safe-area-inset-bottom)); border-radius:50%;}
-  #btnRight{width:56px; height:56px; left:calc(158px + env(safe-area-inset-left)); bottom:calc(56px + env(safe-area-inset-bottom)); border-radius:50%;}
+  #btnFwd{width:96px; height:96px; border-radius:50%; left:calc(24px + env(safe-area-inset-left)); bottom:calc(46px + env(safe-area-inset-bottom)); font-size:15px;}
   #btnSwing{width:96px; height:96px; right:calc(20px + env(safe-area-inset-right)); bottom:calc(46px + env(safe-area-inset-bottom));
     border-radius:50%; background:radial-gradient(circle at 35% 30%, #ff8f6b, var(--rose) 70%); border:2px solid rgba(255,255,255,.4);
     color:#2a0f0f; font-size:16px; box-shadow:0 8px 18px rgba(255,107,107,.35);}
@@ -212,9 +209,6 @@
       </div>
       <div class="touch-controls">
         <div class="ctrl-btn" id="btnFwd">▲<br>前進</div>
-        <div class="ctrl-btn" id="btnBack">▼ 後退</div>
-        <div class="ctrl-btn" id="btnLeft">◀</div>
-        <div class="ctrl-btn" id="btnRight">▶</div>
         <div class="ctrl-btn" id="btnSwing">たたく！</div>
       </div>
       <label class="gyro-toggle" style="top:calc(46px + env(safe-area-inset-top));"><input type="checkbox" id="gyroToggle">向きで回転(任意)</label>
@@ -609,9 +603,6 @@
   }
   function initPlayerControls(){
     bindHold('btnFwd', ()=>keys.w=true, ()=>keys.w=false);
-    bindHold('btnBack', ()=>keys.s=true, ()=>keys.s=false);
-    bindHold('btnLeft', ()=>keys.a=true, ()=>keys.a=false);
-    bindHold('btnRight', ()=>keys.d=true, ()=>keys.d=false);
     const swingBtn=document.getElementById('btnSwing');
     const tap=(e)=>{ e.preventDefault(); trySwing(); };
     swingBtn.addEventListener('touchstart', tap, {passive:false});
