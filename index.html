@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>目隠しスイカ割り(2台版・WebRTC) | Blind Suika Wari</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -17,14 +17,21 @@
     --text:#f7ecd9; --text-dim:#cbb99a;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  .hidden{display:none !important;}
   html,body{margin:0; padding:0; height:100%; overflow:hidden; background:var(--ink); font-family:'Inter',sans-serif; color:var(--text); -webkit-font-smoothing:antialiased; touch-action:none; overscroll-behavior:none;}
   .display{font-family:'Baloo 2',sans-serif;}
   .mono{font-family:'JetBrains Mono',monospace;}
 
-  #app{position:relative; width:100vw; height:100vh; background:var(--ink);}
+  #app{position:relative; width:100vw; height:100vh; height:100dvh; height:calc(var(--app-height, 100vh)); background:var(--ink);}
   .screen{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:20;
     background:radial-gradient(circle at 30% 20%, rgba(90,42,94,.55), rgba(18,11,23,.96) 70%);}
   .screen.hidden{display:none;}
+  .screen.fullbleed{background:#000; display:block; padding:0;}
+  .fullbleed-bg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.92;}
+  .fullbleed-overlay{position:absolute; left:0; right:0; bottom:0; z-index:2; text-align:center;
+    padding:28px 24px calc(28px + env(safe-area-inset-bottom));
+    background:linear-gradient(0deg, rgba(10,6,14,0.94), rgba(10,6,14,0.65) 55%, rgba(10,6,14,0));}
+  .fullbleed-overlay .btn.ghost{max-width:280px; margin-left:auto; margin-right:auto;}
   .card{width:min(92vw,520px); max-height:90vh; overflow:auto; background:linear-gradient(160deg,var(--ink-soft),#17101f);
     border:1px solid rgba(255,255,255,.1); border-radius:20px; padding:30px 28px; box-shadow:0 30px 60px rgba(0,0,0,.5);}
   .card h1{font-family:'Baloo 2',sans-serif; font-size:clamp(22px,5vw,32px); margin:0 0 6px;
@@ -70,6 +77,8 @@
   /* ---- Game view (fullscreen, one per device) ---- */
   #gameView{position:absolute; inset:0; z-index:5;}
   #gameView.hidden{display:none;}
+  #ghostView{position:absolute; inset:0; z-index:5;}
+  #ghostView.hidden{display:none;}
   .panel{position:absolute; inset:0;}
   .panel canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
 
@@ -108,7 +117,7 @@
   #btnFwd{width:96px; height:96px; border-radius:50%; left:calc(24px + env(safe-area-inset-left)); bottom:calc(46px + env(safe-area-inset-bottom)); font-size:15px;}
   #btnSwing{width:96px; height:96px; right:calc(20px + env(safe-area-inset-right)); bottom:calc(46px + env(safe-area-inset-bottom));
     border-radius:50%; background:radial-gradient(circle at 35% 30%, #ff8f6b, var(--rose) 70%); border:2px solid rgba(255,255,255,.4);
-    color:#2a0f0f; font-size:16px; box-shadow:0 8px 18px rgba(255,107,107,.35);}
+    color:#2a0f0f; font-size:12px; box-shadow:0 8px 18px rgba(255,107,107,.35); flex-direction:column; gap:2px;}
   #btnSwing:active{transform:scale(0.92);}
   .gyro-toggle{position:absolute; left:12px; z-index:9; pointer-events:auto;
     font-size:10.5px; color:var(--text-dim); display:flex; align-items:center; gap:5px; background:rgba(0,0,0,.45); padding:4px 8px; border-radius:8px;}
@@ -137,6 +146,7 @@
 </style>
 </head>
 <body>
+<div id="fadeOverlay" style="position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; z-index:9999;"></div>
 <div id="app">
 
   <!-- Role select -->
@@ -167,7 +177,7 @@
       <p class="sub" id="hostSub">このコードを観測者側の端末に入力してもらってください。</p>
       <div class="code-box"><div class="label">ROOM CODE</div><div class="code mono" id="hostCodeDisplay">----</div></div>
       <div class="status-line" id="hostWaitStatus"><span class="spinner"></span>観測者の参加を待っています…</div>
-      <button class="btn" id="hostStartBtn" disabled>目隠しをつけてスタート</button>
+      <button class="btn" id="hostStartBtn" disabled>接続完了・すすむ</button>
       <button class="btn ghost" id="hostSoloBtn">観測者なしでテスト開始</button>
       <button class="btn ghost" id="hostBackBtn">役割選択に戻る</button>
     </div>
@@ -186,12 +196,39 @@
   </div>
 
   <!-- Spotter: waiting for host to start -->
-  <div class="screen hidden" id="scrJoinWait">
-    <div class="card">
+  <div class="screen hidden fullbleed" id="scrJoinWait">
+    <img src="natunokoe.png" alt="" class="fullbleed-bg">
+    <div class="fullbleed-overlay">
       <h1 class="display" id="joinWaitHeading">接続しました！</h1>
       <p class="sub" id="joinWaitSub">プレイヤー側の準備が終わるのを待っています。目隠しをつけてもらいましょう。</p>
       <div class="status-line"><span class="spinner"></span>プレイヤー開始待ち…</div>
       <button class="btn ghost" id="joinWaitBackBtn">役割選択に戻る</button>
+    </div>
+  </div>
+
+  <!-- Title (post-connection hub) -->
+  <div class="screen hidden" id="scrTitle">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px; width:min(92vw,900px);">
+      <div style="position:relative; width:100%; aspect-ratio:16/9; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px rgba(0,0,0,.4);">
+        <img src="title.jpg" alt="夏の声" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;">
+        <button id="titleToSelectBtn" aria-label="スタート" style="position:absolute; left:81%; top:50%; width:23%; height:36%; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
+      </div>
+      <p class="sub" id="titleStatus" style="text-align:center; margin:0;">準備ができました。</p>
+      <button class="btn ghost" id="titleBackBtn" style="max-width:280px;">役割選択に戻る</button>
+    </div>
+  </div>
+
+  <!-- Game select -->
+  <div class="screen hidden" id="scrGameSelect">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:12px; width:min(94vw,960px);">
+      <div style="position:relative; width:100%; aspect-ratio:16/9; border-radius:16px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.5);">
+        <img src="senntakugamenn.jpg" alt="ゲームをえらぶ" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;">
+        <button id="pickGhost" aria-label="ゆうれい探し" style="position:absolute; left:29.8%; top:27.2%; width:13.6%; aspect-ratio:1/1; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
+        <button id="pickSuika" aria-label="スイカ割り" style="position:absolute; left:79.2%; top:67.2%; width:17.4%; aspect-ratio:1/1; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
+      </div>
+      <label style="display:flex; align-items:center; justify-content:center; gap:8px; font-size:12.5px; color:var(--text-dim);">
+        <input type="checkbox" id="ghostFrontCamToggle" style="transform:scale(0.9);"> ゆうれい探しで内カメラ(自撮り側)を使う
+      </label>
     </div>
   </div>
 
@@ -209,7 +246,7 @@
       </div>
       <div class="touch-controls">
         <div class="ctrl-btn" id="btnFwd">▲<br>前進</div>
-        <div class="ctrl-btn" id="btnSwing">たたく！</div>
+        <div class="ctrl-btn" id="btnSwing"><img src="suica_Stick.png" alt="" style="width:26px; transform:rotate(25deg); filter:drop-shadow(0 2px 2px rgba(0,0,0,.35)); pointer-events:none;">たたく！</div>
       </div>
       <label class="gyro-toggle" style="top:calc(46px + env(safe-area-inset-top));"><input type="checkbox" id="gyroToggle" checked>向きで回転(任意)</label>
       <label class="gyro-toggle" id="gyroInvertRow" style="top:calc(72px + env(safe-area-inset-top));"><input type="checkbox" id="gyroInvert" checked>回転が逆なら反転</label>
@@ -233,6 +270,42 @@
     </div>
   </div>
 
+  <!-- Ghost hunt game -->
+  <div id="ghostView" class="hidden">
+    <div class="panel" id="ghostPlayerPanel">
+      <video id="camVideo" autoplay playsinline muted style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000;"></video>
+      <div class="tag blind"><span class="dot"></span>ゆうれい探し(カメラ)</div>
+      <div class="player-hud">
+        <div class="stat-corner"><span id="ghostStatTime">⏱ 60s</span><span id="ghostStatCaught">👻 0/0</span></div>
+        <div class="toast" id="ghostToast">-</div>
+      </div>
+      <div class="touch-controls">
+        <div class="ctrl-btn" id="btnCapture" style="left:50%; right:auto; transform:translateX(-50%); width:104px; height:104px; border-radius:50%; background:rgba(255,255,255,0.15); border:5px solid rgba(255,255,255,0.9); bottom:calc(48px + env(safe-area-inset-bottom));">
+          <div style="width:76%; height:76%; border-radius:50%; background:#f0f0f0;"></div>
+        </div>
+        <div class="ctrl-btn" id="btnCamFlip" style="left:auto; right:calc(18px + env(safe-area-inset-right)); width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.32); bottom:calc(66px + env(safe-area-inset-bottom));">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 2l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <path d="M7 22l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="panel hidden" id="ghostSpotterPanel">
+      <video id="remoteVideo" autoplay playsinline muted style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background-color:#05070f; background-image:url('nightbacklayer4.jpg'); background-size:cover; background-position:center;"></video>
+      <canvas id="ghostOverlayCanvas" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
+      <div class="tag spotter"><span class="dot"></span>観測者ビュー(カメラ映像)</div>
+      <div class="toast" id="ghostSpotterToast">-</div>
+      <div class="spotter-hud">
+        <div class="legend"><span><i style="background:#8f7fe8"></i>ゆうれい</span></div>
+        <div class="readout-stack">
+          <div class="readout" id="ghostReadoutTime">残り60s</div>
+          <div class="readout" id="ghostReadoutCaught">0/0 匹</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Result -->
   <div class="screen hidden" id="scrResult">
     <div class="card">
@@ -245,7 +318,23 @@
         <div><div class="val" id="statHits">0</div><div class="lbl">命中回数</div></div>
         <div><div class="val" id="statFinalTime">0.0s</div><div class="lbl">タイム</div></div>
       </div>
-      <button class="btn" id="retryBtn">もう一回スイカ割り</button>
+      <button class="btn" id="retryBtn">タイトルへ戻る</button>
+    </div>
+  </div>
+
+  <!-- Ghost result -->
+  <div class="screen hidden" id="scrGhostResult">
+    <div class="card">
+      <div class="grade-hero">
+        <div class="grade-circle" id="ghostGradeCircle">👻</div>
+        <div><p class="grade-title display" id="ghostGradeTitle">ゆうれいハンター！</p><p class="grade-desc" id="ghostGradeDesc">見事な腕前でした。</p></div>
+      </div>
+      <div class="result-stats">
+        <div><div class="val" id="ghostStatCapturedFinal">0体</div><div class="lbl">捕獲数</div></div>
+        <div><div class="val" id="ghostStatRate">0体</div><div class="lbl">最大同時討伐</div></div>
+        <div><div class="val" id="ghostStatFinalTime">0.0s</div><div class="lbl">タイム</div></div>
+      </div>
+      <button class="btn" id="ghostRetryBtn">タイトルへ戻る</button>
     </div>
   </div>
 
@@ -254,6 +343,19 @@
 <script>
 (function(){
   "use strict";
+
+  // ================= Dynamic viewport height fix =================
+  // 100vh on mobile browsers often includes space under a collapsible address
+  // bar, causing bottom-anchored buttons to sit off-screen or drift depending
+  // on the device/browser. This keeps a CSS var in sync with the real visible height.
+  function setAppHeight(){
+    const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', h+'px');
+  }
+  setAppHeight();
+  window.addEventListener('resize', setAppHeight);
+  window.addEventListener('orientationchange', ()=> setTimeout(setAppHeight, 100));
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', setAppHeight);
 
   // ================= PeerJS (WebRTC) helpers =================
   const PEER_PREFIX = 'suikawari5-';
@@ -271,14 +373,29 @@
   }
 
   // ================= Screen helpers =================
-  const screens = ['scrRole','scrHost','scrJoin','scrJoinWait','scrResult'];
+  const screens = ['scrRole','scrHost','scrJoin','scrJoinWait','scrTitle','scrGameSelect','scrResult','scrGhostResult'];
   function showScreen(id){
+    flashTransition();
     screens.forEach(s=> document.getElementById(s).classList.toggle('hidden', s!==id));
-    document.getElementById('gameView').classList.toggle('hidden', true);
+    document.getElementById('gameView').classList.add('hidden');
+    document.getElementById('ghostView').classList.add('hidden');
   }
   function showGame(){
+    flashTransition();
     screens.forEach(s=> document.getElementById(s).classList.add('hidden'));
     document.getElementById('gameView').classList.remove('hidden');
+    document.getElementById('ghostView').classList.add('hidden');
+  }
+  function showGhostGame(){
+    flashTransition();
+    screens.forEach(s=> document.getElementById(s).classList.add('hidden'));
+    document.getElementById('gameView').classList.add('hidden');
+    document.getElementById('ghostView').classList.remove('hidden');
+  }
+  function goToTitle(statusText){
+    document.getElementById('titleStatus').textContent = statusText;
+    showScreen('scrTitle');
+    playTitleBGM();
   }
 
   let role = null;      // 'player' | 'spotter'
@@ -306,8 +423,75 @@
   function sfxStumble(){ beep(90,0.3,'square',0.2); beep(70,0.35,'square',0.15,0.05); }
   function sfxBreak(){ [0,0.08,0.16,0.28].forEach((d,i)=>beep(260-i*30,0.3,'square',0.22,d)); beep(880,0.5,'sine',0.15,0.3); beep(1100,0.6,'sine',0.12,0.4); }
 
+  // ================= Audio assets (BGM / SE files) =================
+  function mkAudio(src, loop, volume){
+    const a = new Audio(src);
+    a.loop = !!loop;
+    a.volume = volume!==undefined ? volume : 1;
+    a.preload = 'auto';
+    return a;
+  }
+  const bgmSummer = mkAudio('Summer.mp3', true, 0.55);
+  const bgmFrog   = mkAudio('frog.mp3',   true, 0.4);
+  const bgmRiver  = mkAudio('River.mp3',  true, 0.35);
+  const seSand    = mkAudio('sand.mp3',   true, 0.4);
+  const seShutter = mkAudio('Shutter.mp3',false, 0.85);
+  const seSnap    = mkAudio('Snap.mp3',   false, 0.85);
+  const seSuika   = mkAudio('suika.mp3',  false, 0.9);
+  const se15      = mkAudio('15.mp3',     false, 0.8);
+  const se30      = mkAudio('30.mp3',     false, 0.8);
+  const seFade    = mkAudio('fade.mp3',   false, 0.6);
+
+  function playOneShot(a){ try{ a.currentTime=0; a.play().catch(()=>{}); }catch(e){} }
+  function stopAudio(a){ try{ a.pause(); a.currentTime=0; }catch(e){} }
+  function fadeStopAudio(a, ms){
+    if(a.paused) return;
+    ms = ms||400;
+    const startVol = a.volume, steps=8, stepMs=ms/steps;
+    let i=0;
+    const iv = setInterval(()=>{
+      i++; a.volume = Math.max(0, startVol*(1-i/steps));
+      if(i>=steps){ clearInterval(iv); stopAudio(a); a.volume=startVol; }
+    }, stepMs);
+  }
+  function playTitleBGM(){
+    fadeStopAudio(bgmFrog); fadeStopAudio(bgmRiver);
+    if(bgmSummer.paused) bgmSummer.play().catch(()=>{});
+  }
+  function playGhostBGM(){
+    fadeStopAudio(bgmSummer);
+    if(bgmFrog.paused) bgmFrog.play().catch(()=>{});
+    if(bgmRiver.paused) bgmRiver.play().catch(()=>{});
+  }
+  function setFootstepPlaying(on){
+    if(on){ if(seSand.paused) seSand.play().catch(()=>{}); }
+    else { if(!seSand.paused) seSand.pause(); }
+  }
+  function flashTransition(){
+    playOneShot(seFade);
+    setTimeout(()=>stopAudio(seFade), 1300);
+    const el = document.getElementById('fadeOverlay');
+    if(!el) return;
+    el.style.transition='opacity 0.25s ease';
+    el.style.opacity='1';
+    setTimeout(()=>{
+      el.style.transition='opacity 0.75s ease';
+      el.style.opacity='0';
+    }, 280);
+  }
+
   // ================= World / game state =================
   const WORLD_W=20, WORLD_H=20, TIME_LIMIT=60;
+  const GHOST_TIME_LIMIT=60, GHOST_CAPTURE_TOLERANCE=0.22, GHOST_OVERLAY_FOV=1.1, MAX_GHOSTS=8;
+  let ghostState='idle'; // 'idle' | 'playing' | 'ended'
+  let ghosts=[]; // host-side: fixed pool of MAX_GHOSTS slots: [{id, active, heading, vy, respawnAt}]
+  let ghostHotspots=[];
+  let ghostStats={time:GHOST_TIME_LIMIT, elapsed:0, captured:0, maxCombo:0};
+  let ghostLastEvent={type:null, seq:0};
+  let localCamStream=null;
+  let netGhosts=null, netGhostPlayerHeading=0, ghostSeenEventSeq=0;
+  let camFacingOffset=0; // 0 = back camera, Math.PI = front camera (it faces the opposite way)
+  let ghostUsingFront=false;
   let player, melon, holes, keys, swing, stats, gameState='idle';
   let lastEvent = {type:null, seq:0, accuracy:0};
 
@@ -326,7 +510,7 @@
     }
     keys={w:false,a:false,s:false,d:false};
     swing={phase:'idle',t:0,cooldown:0};
-    stats={time:TIME_LIMIT, elapsed:0, swings:0, misses:0, stunned:false, stunTimer:0};
+    stats={time:TIME_LIMIT, elapsed:0, swings:0, misses:0, stunned:false, stunTimer:0, played30:false, played15:false};
     lastEvent={type:null,seq:0,accuracy:0};
   }
 
@@ -336,6 +520,12 @@
     toastEl.textContent=text; toastEl.className='toast show '+(cls||'');
     clearTimeout(showToast._t); showToast._t=setTimeout(()=>toastEl.classList.remove('show'),1100);
   }
+  function showToastOn(elId,text,cls){
+    const el=document.getElementById(elId);
+    if(!el) return;
+    el.textContent=text; el.className='toast show '+(cls||'');
+    clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1100);
+  }
 
   // ================= Player-side physics =================
   const FORWARD_SPEED=3.3, BACK_SPEED=1.9, ROT_SPEED=2.5, WORLD_MARGIN=0.6;
@@ -344,7 +534,7 @@
   function trySwing(){
     if(stats.stunned || swing.phase!=='idle' || swing.cooldown>0) return;
     swing.phase='windup'; swing.t=0; swing.hitDone=false;
-    stats.swings++; sfxSwoosh();
+    stats.swings++; sfxSwoosh(); playOneShot(seSnap);
   }
 
   function resolveSwingHit(){
@@ -380,6 +570,8 @@
   function updatePlayerPhysics(dt){
     stats.elapsed+=dt;
     stats.time-=dt;
+    if(!stats.played30 && stats.time<=30){ stats.played30=true; playOneShot(se30); lastEvent={type:'time30',seq:lastEvent.seq+1,accuracy:0}; }
+    if(!stats.played15 && stats.time<=15){ stats.played15=true; playOneShot(se15); lastEvent={type:'time15',seq:lastEvent.seq+1,accuracy:0}; }
     if(stats.time<=0 && gameState==='playing'){ stats.time=0; endGame('timeout'); return; }
     if(stats.stunned){
       stats.stunTimer-=dt;
@@ -400,6 +592,9 @@
       }
       player.x=Math.min(WORLD_W-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.x));
       player.y=Math.min(WORLD_H-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.y));
+      setFootstepPlaying(fwd!==0);
+    } else {
+      setFootstepPlaying(false);
     }
     if(!stats.stunned){
       for(const h of holes){
@@ -450,7 +645,18 @@
   }
   window.addEventListener('resize', resizeCanvases);
 
+  const melonWholeImg = new Image(); melonWholeImg.src = 'suika.png';
+  const melonBrokenImg = new Image(); melonBrokenImg.src = 'suika_bre.png';
+  const stickImg = new Image(); stickImg.src = 'suica_Stick.png';
+  const bgBeachImg = new Image(); bgBeachImg.src = 'Backbeach.jpg';
+
   function drawMelonSprite(ctx,cx,cy,size,integrity){
+    const img = integrity>0 ? melonWholeImg : melonBrokenImg;
+    if(img.complete && img.naturalWidth>0){
+      ctx.drawImage(img, cx-size/2, cy-size/2, size, size);
+      return;
+    }
+    // Fallback (image not loaded yet / failed to load): simple procedural drawing.
     const r=size/2; ctx.save();
     ctx.beginPath(); ctx.fillStyle='#2f8f4e'; ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle='#195e33'; ctx.lineWidth=Math.max(1,r*0.09);
@@ -467,6 +673,22 @@
       }
     }
     ctx.restore();
+  }
+
+  function drawStick(){
+    if(!(stickImg.complete && stickImg.naturalWidth>0)) return;
+    if(swing.phase==='idle') return;
+    const W=fpvCanvas.width, H=fpvCanvas.height;
+    let angle;
+    if(swing.phase==='windup'){ const tt=swing.t/0.22; angle = -55 - tt*35; }
+    else if(swing.phase==='impact'){ angle = 40; }
+    else { const tt=swing.t/0.28; angle = 40 - tt*95; }
+    const size = H*0.55;
+    fctx.save();
+    fctx.translate(W*0.83, H*1.02);
+    fctx.rotate(angle*Math.PI/180);
+    fctx.drawImage(stickImg, -size*0.15, -size*0.95, size*0.3, size);
+    fctx.restore();
   }
 
   function drawFPV(p, m, hs){
@@ -501,6 +723,7 @@
         drawMelonSprite(fctx,screenX,groundY-size*0.35,size,d.obj.integrity);
       }
     }
+    drawStick();
     const vg=fctx.createRadialGradient(W/2,H/2,H*0.15,W/2,H/2,H*0.75);
     vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.55)');
     fctx.fillStyle=vg; fctx.fillRect(0,0,W,H);
@@ -511,7 +734,8 @@
     const marginX=W*0.06, marginY=H*0.06, usableW=W-marginX*2, usableH=H-marginY*2;
     const sx=(wx)=>marginX+(wx/WORLD_W)*usableW, sy=(wy)=>marginY+(wy/WORLD_H)*usableH;
     const scale=usableW/WORLD_W;
-    tctx.fillStyle='#f2cd7e'; tctx.fillRect(0,0,W,H);
+    if(bgBeachImg.complete && bgBeachImg.naturalWidth>0){ tctx.drawImage(bgBeachImg,0,0,W,H); }
+    else { tctx.fillStyle='#f2cd7e'; tctx.fillRect(0,0,W,H); }
     tctx.strokeStyle='rgba(0,0,0,0.05)'; tctx.lineWidth=1;
     for(let i=0;i<=WORLD_W;i+=2){ tctx.beginPath(); tctx.moveTo(sx(i),marginY); tctx.lineTo(sx(i),H-marginY); tctx.stroke(); }
     for(let j=0;j<=WORLD_H;j+=2){ tctx.beginPath(); tctx.moveTo(marginX,sy(j)); tctx.lineTo(W-marginX,sy(j)); tctx.stroke(); }
@@ -583,7 +807,8 @@
   function endGame(reason){
     gameState='ended';
     const timedOut = reason==='timeout';
-    if(timedOut) sfxMiss(); else sfxBreak();
+    setFootstepPlaying(false);
+    if(timedOut) sfxMiss(); else { sfxBreak(); playOneShot(seSuika); }
     if(role==='player' && conn && conn.open){
       try{ conn.send(Object.assign({type:'state'}, buildLiveSnapshot(true), {timedOut})); }catch(e){}
     }
@@ -618,6 +843,16 @@
     window.addEventListener('keyup',(e)=>{
       const k=e.key.toLowerCase(); if(k==='w'||k==='a'||k==='s'||k==='d') keys[k]=false;
     });
+  }
+
+  // Gyro is shared by both games (suika-wari rotation and ghost-hunt aiming), so it's
+  // initialized once independently of which game is picked first — it used to live only
+  // inside initPlayerControls(), which meant picking the ghost game before ever starting
+  // suika-wari left the gyro (and therefore aiming) completely uninitialized.
+  let gyroSystemInitialized = false;
+  function initGyroSystem(){
+    if(gyroSystemInitialized) return;
+    gyroSystemInitialized = true;
 
     const gyroToggle=document.getElementById('gyroToggle');
     const gyroInvertRow=document.getElementById('gyroInvertRow');
@@ -636,7 +871,8 @@
         }
         gyroInvertRow.style.display='flex'; gyroDebug.style.display='block';
         gyroDebug.textContent='センサー待機中…';
-        playerAngleBaseline = player.angle; headingBaseline=null; gyroDelta=0; gyroActive=true;
+        playerAngleBaseline = (player && typeof player.angle==='number') ? player.angle : 0;
+        headingBaseline=null; gyroDelta=0; gyroActive=true;
 
         // Prefer the absolute/compass-referenced event when available (more stable, less drift).
         // Listening to both event types at once was the bug: they can disagree and fight,
@@ -675,6 +911,7 @@
     });
     window._enableGyroIfChecked = ()=>{ if(gyroToggle.checked && !gyroActive) enableGyro(); };
   }
+  initGyroSystem();
 
   // Convert device orientation Euler angles (degrees) to a world-space heading (radians),
   // correctly handling the phone being held upright (portrait, screen facing the user),
@@ -742,19 +979,62 @@
       if(netPlayer.lastEvent && netPlayer.lastEvent.seq>seenEventSeq){
         seenEventSeq=netPlayer.lastEvent.seq;
         const ev=netPlayer.lastEvent;
-        if(ev.type==='hit'){ sfxHit(ev.accuracy); showToast(ev.accuracy>=85?'パーン！会心の一撃！':'ナイスヒット！','good'); }
+        if(ev.type==='hit'){ showToast(ev.accuracy>=85?'パーン！会心の一撃！':'ナイスヒット！','good'); }
         else if(ev.type==='miss'){ sfxMiss(); showToast('空振り！','bad'); }
         else if(ev.type==='stumble'){ sfxStumble(); showToast('穴にハマった！','bad'); }
+        else if(ev.type==='time30'){ playOneShot(se30); }
+        else if(ev.type==='time15'){ playOneShot(se15); }
       }
       if(netPlayer.ended){
         gameState='ended';
-        if(netPlayer.timedOut) sfxMiss(); else sfxBreak();
+        if(netPlayer.timedOut) sfxMiss(); else playOneShot(seSuika);
         showResult(netMelon&&netMelon.hits?netMelon.hits:(netPlayer.hits||[]), netPlayer.elapsed||0, !!netPlayer.timedOut);
       }
+    }
+    if(ghostState==='playing' && role==='spotter'){
+      drawGhostOverlay();
     }
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
+
+  function drawGhostOverlay(){
+    const canvas = document.getElementById('ghostOverlayCanvas');
+    if(!canvas) return;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const w = Math.max(2,Math.floor(rect.width)), h = Math.max(2,Math.floor(rect.height));
+    if(canvas.width!==w) canvas.width=w;
+    if(canvas.height!==h) canvas.height=h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(!netGhosts) return;
+
+    // Figure out the actual rendered video rectangle (object-fit:contain letterboxes
+    // it within the panel), so ghosts are only ever drawn on top of real video content.
+    const videoEl = document.getElementById('remoteVideo');
+    let vx=0, vy=0, vw=canvas.width, vh=canvas.height;
+    if(videoEl && videoEl.videoWidth && videoEl.videoHeight){
+      const vRatio = videoEl.videoWidth/videoEl.videoHeight, cRatio = canvas.width/canvas.height;
+      if(vRatio > cRatio){ vw=canvas.width; vh=canvas.width/vRatio; vx=0; vy=(canvas.height-vh)/2; }
+      else { vh=canvas.height; vw=canvas.height*vRatio; vy=0; vx=(canvas.width-vw)/2; }
+    }
+
+    for(const g of netGhosts){
+      if(!g.active) continue;
+      let diff = g.heading - netGhostPlayerHeading;
+      while(diff>Math.PI) diff-=Math.PI*2;
+      while(diff<-Math.PI) diff+=Math.PI*2;
+      if(Math.abs(diff) > GHOST_OVERLAY_FOV/2) continue;
+      const sx = vx + vw/2 + (diff/(GHOST_OVERLAY_FOV/2))*(vw/2)*0.92;
+      const sy = vy + vh*(g.vy!==undefined?g.vy:0.5);
+      const size = vw*0.1;
+      ctx.font = size+'px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(143,127,232,0.95)'; ctx.shadowBlur=Math.max(10,size*0.4);
+      ctx.fillText('👻', sx, sy);
+      ctx.shadowBlur=0;
+    }
+  }
 
   // ================= Flow: role select =================
   document.getElementById('pickPlayer').addEventListener('click', ()=>startHostFlow());
@@ -791,8 +1071,12 @@
   }
 
   document.getElementById('hostBackBtn').addEventListener('click', ()=>{ teardownPeer(); showScreen('scrRole'); });
-  document.getElementById('hostSoloBtn').addEventListener('click', ()=>{ document.getElementById('hostStartBtn').disabled=false; beginPlayerGame(); if(window._enableGyroIfChecked) window._enableGyroIfChecked(); });
-  document.getElementById('hostStartBtn').addEventListener('click', ()=>{ beginPlayerGame(); if(window._enableGyroIfChecked) window._enableGyroIfChecked(); });
+  document.getElementById('hostSoloBtn').addEventListener('click', ()=>{ document.getElementById('hostStartBtn').disabled=false; goToTitle('(観測者なし・ソロモード)'); });
+  document.getElementById('hostStartBtn').addEventListener('click', ()=>{ goToTitle((conn&&conn.open)?'✅ 観測者と接続中です':'(観測者なし・ソロモード)'); });
+  document.getElementById('titleToSelectBtn').addEventListener('click', ()=> showScreen('scrGameSelect'));
+  document.getElementById('titleBackBtn').addEventListener('click', ()=>{ clearTimers(); teardownPeer(); role=null; roomCode=null; showScreen('scrRole'); });
+  document.getElementById('pickSuika').addEventListener('click', ()=>{ beginPlayerGame(); if(window._enableGyroIfChecked) window._enableGyroIfChecked(); });
+  document.getElementById('pickGhost').addEventListener('click', ()=> beginGhostGame());
 
   async function beginPlayerGame(){
     buildWorld();
@@ -814,6 +1098,209 @@
     timers.push(t);
   }
 
+  // ================= Ghost hunt game (camera + gyro heading) =================
+  let ghostControlsInitialized = false;
+  function currentGhostHeading(){
+    return (gyroActive ? (playerAngleBaseline+gyroDelta) : 0) + camFacingOffset;
+  }
+
+  function initGhostControls(){
+    const capBtn=document.getElementById('btnCapture');
+    const tap=(e)=>{ e.preventDefault(); tryCapture(); };
+    capBtn.addEventListener('touchstart', tap, {passive:false});
+    capBtn.addEventListener('mousedown', tap);
+
+    const flipBtn=document.getElementById('btnCamFlip');
+    const flipTap=(e)=>{ e.preventDefault(); switchGhostCamera(!ghostUsingFront); };
+    flipBtn.addEventListener('touchstart', flipTap, {passive:false});
+    flipBtn.addEventListener('mousedown', flipTap);
+  }
+
+  async function switchGhostCamera(useFront){
+    try{
+      if(localCamStream){ localCamStream.getTracks().forEach(tr=>tr.stop()); localCamStream=null; }
+      const camVideoEl = document.getElementById('camVideo');
+      camVideoEl.srcObject = null;
+      // Small delay: on many phones the camera hardware needs a beat to release
+      // after stopping a track before it can be reopened with a different facingMode.
+      await new Promise(r=>setTimeout(r,150));
+      const newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode: useFront?'user':'environment'}, audio:false});
+      localCamStream = newStream;
+      camVideoEl.srcObject = newStream;
+      camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
+      const newOffset = useFront ? Math.PI : 0;
+      const delta = newOffset - camFacingOffset;
+      if(delta !== 0){
+        for(const g of ghosts){
+          g.heading = ((g.heading+delta)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+        }
+      }
+      camFacingOffset = newOffset;
+      ghostUsingFront = useFront;
+      if(conn && conn.open && peer){
+        try{ peer.call(conn.peer, localCamStream); }catch(e){}
+      }
+      showToastOn('ghostToast', useFront?'内カメラに切替':'外カメラに切替', 'good');
+    }catch(e){
+      console.warn('camera switch failed', e);
+      showToastOn('ghostToast','カメラ切替失敗: '+(e&&e.name?e.name:'不明なエラー'),'bad');
+    }
+  }
+
+  async function beginGhostGame(){
+    const useFront = document.getElementById('ghostFrontCamToggle').checked;
+    let stream;
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode: useFront?'user':'environment'}, audio:false});
+    }catch(e){
+      showToast('カメラの許可が必要です','bad');
+      return;
+    }
+    ensureAudio();
+    playGhostBGM();
+    localCamStream = stream;
+    camFacingOffset = useFront ? Math.PI : 0;
+    ghostUsingFront = useFront;
+    const camVideoEl = document.getElementById('camVideo');
+    camVideoEl.srcObject = stream;
+    camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
+    if(!ghostControlsInitialized){ initGhostControls(); ghostControlsInitialized=true; }
+    if(window._enableGyroIfChecked) window._enableGyroIfChecked();
+
+    // Ghosts spawn clustered around 1-2 "hotspot" directions (so the spotter's
+    // callouts are meaningful), stay at MAX_GHOSTS concurrently, and respawn
+    // elsewhere after a random delay once caught.
+    ghostHotspots = [Math.random()*Math.PI*2, Math.random()*Math.PI*2];
+    ghosts = [];
+    for(let i=0;i<MAX_GHOSTS;i++){
+      ghosts.push({id:'g'+i, active:true, heading:randomGhostHeading(), vy:0.22+Math.random()*0.5, respawnAt:0});
+    }
+    ghostStats = {time:GHOST_TIME_LIMIT, elapsed:0, captured:0, maxCombo:0, played30:false, played15:false};
+    ghostLastEvent = {type:null, seq:0};
+    ghostState='playing';
+    showGhostGame();
+    document.getElementById('ghostPlayerPanel').classList.remove('hidden');
+    document.getElementById('ghostSpotterPanel').classList.add('hidden');
+
+    if(conn && conn.open){
+      try{
+        conn.send({type:'ghost_world', duration:GHOST_TIME_LIMIT, maxGhosts:MAX_GHOSTS});
+        if(peer) peer.call(conn.peer, localCamStream);
+      }catch(e){}
+    }
+
+    const t = setInterval(()=>{
+      if(ghostState!=='playing') return;
+      ghostStats.elapsed += 0.15;
+      ghostStats.time -= 0.15;
+      if(!ghostStats.played30 && ghostStats.time<=30){ ghostStats.played30=true; playOneShot(se30); ghostLastEvent={type:'time30', seq:ghostLastEvent.seq+1}; }
+      if(!ghostStats.played15 && ghostStats.time<=15){ ghostStats.played15=true; playOneShot(se15); ghostLastEvent={type:'time15', seq:ghostLastEvent.seq+1}; }
+      const now = performance.now();
+      for(const g of ghosts){
+        if(!g.active && now>=g.respawnAt){
+          g.heading=randomGhostHeading(); g.vy=0.22+Math.random()*0.5; g.active=true;
+        }
+      }
+      const heading = currentGhostHeading();
+      document.getElementById('ghostStatTime').textContent='⏱ 残り'+Math.ceil(Math.max(0,ghostStats.time))+'s';
+      document.getElementById('ghostStatCaught').textContent='👻 捕獲 '+ghostStats.captured;
+      if(conn && conn.open){
+        try{
+          conn.send({type:'ghost_state', heading,
+            ghosts: ghosts.map(g=>({id:g.id, heading:g.heading, active:g.active, vy:g.vy})),
+            time:Math.max(0,ghostStats.time), elapsed:ghostStats.elapsed, captured:ghostStats.captured,
+            lastEvent:ghostLastEvent, ended:false});
+        }catch(e){}
+      }
+      if(ghostStats.time<=0){ endGhostGame(); }
+    }, 150);
+    timers.push(t);
+  }
+
+  const MIN_GHOST_SPACING = 0.4; // ~23 degrees minimum gap between simultaneously active ghosts
+
+  function angularDist(a,b){
+    let d=a-b;
+    while(d>Math.PI) d-=Math.PI*2;
+    while(d<-Math.PI) d+=Math.PI*2;
+    return Math.abs(d);
+  }
+
+  function randomGhostHeading(){
+    let heading, attempts=0;
+    do{
+      if(Math.random() < 0.7 && ghostHotspots.length){
+        const hs = ghostHotspots[Math.floor(Math.random()*ghostHotspots.length)];
+        heading = hs + (Math.random()*0.7-0.35);
+      } else {
+        heading = Math.random()*Math.PI*2;
+      }
+      heading = ((heading%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+      attempts++;
+    } while(attempts<14 && ghosts.some(g=> g.active && angularDist(g.heading,heading)<MIN_GHOST_SPACING));
+    return heading;
+  }
+
+  function tryCapture(){
+    if(ghostState!=='playing') return;
+    playOneShot(seShutter);
+    const heading = currentGhostHeading();
+    let caughtCount = 0;
+    const now = performance.now();
+    for(const g of ghosts){
+      if(!g.active) continue;
+      let diff = g.heading-heading;
+      while(diff>Math.PI) diff-=Math.PI*2;
+      while(diff<-Math.PI) diff+=Math.PI*2;
+      if(Math.abs(diff) <= GHOST_OVERLAY_FOV/2){
+        g.active=false;
+        g.respawnAt = now + (2000+Math.random()*4000); // respawn somewhere else after 2-6s
+        caughtCount++;
+      }
+    }
+    if(caughtCount>0){
+      ghostStats.captured += caughtCount;
+      if(caughtCount>ghostStats.maxCombo) ghostStats.maxCombo=caughtCount;
+      sfxHit(90);
+      showToastOn('ghostToast', caughtCount>1 ? ('📸 '+caughtCount+'体まとめてゲット！') : '📸 ゲット！', 'good');
+      ghostLastEvent={type:'catch', seq:ghostLastEvent.seq+1, count:caughtCount};
+    } else {
+      sfxMiss(); showToastOn('ghostToast','うーん、いない…','bad');
+      ghostLastEvent={type:'miss', seq:ghostLastEvent.seq+1};
+    }
+  }
+
+  function endGhostGame(){
+    if(ghostState!=='playing') return;
+    ghostState='ended';
+    clearTimers();
+    if(localCamStream){ localCamStream.getTracks().forEach(tr=>tr.stop()); localCamStream=null; }
+    if(conn && conn.open){
+      try{
+        conn.send({type:'ghost_state', heading:0,
+          ghosts: ghosts.map(g=>({id:g.id, heading:g.heading, active:g.active, vy:g.vy})),
+          time:0, elapsed:ghostStats.elapsed, captured:ghostStats.captured, maxCombo:ghostStats.maxCombo,
+          lastEvent:ghostLastEvent, ended:true});
+      }catch(e){}
+    }
+    showGhostResult(ghostStats.captured, ghostStats.maxCombo, ghostStats.elapsed);
+  }
+
+  function showGhostResult(captured, maxCombo, elapsed){
+    let title,desc,emoji;
+    if(captured>=16){ title='パーフェクトハンター！'; desc='ものすごい捕獲数でした！'; emoji='🏆'; }
+    else if(captured>=10){ title='ナイスハント！'; desc='かなり捕まえました。'; emoji='👻'; }
+    else if(captured>=5){ title='まずまずの成果'; desc='いいペースで捕まえられました。'; emoji='🔦'; }
+    else { title='もう少し…'; desc='声かけを頼りに再挑戦しよう。'; emoji='🌫️'; }
+    document.getElementById('ghostGradeCircle').textContent=emoji;
+    document.getElementById('ghostGradeTitle').textContent=title;
+    document.getElementById('ghostGradeDesc').textContent=desc;
+    document.getElementById('ghostStatCapturedFinal').textContent=captured+'体';
+    document.getElementById('ghostStatRate').textContent=maxCombo+'体';
+    document.getElementById('ghostStatFinalTime').textContent=elapsed.toFixed(1)+'s';
+    setTimeout(()=>{ document.getElementById('scrGhostResult').classList.remove('hidden'); document.getElementById('ghostView').classList.add('hidden'); }, 400);
+  }
+
   // ================= Flow: spotter =================
   const joinInput=document.getElementById('joinCodeInput');
   joinInput.addEventListener('input', ()=>{ joinInput.value = joinInput.value.toUpperCase().replace(/[^A-Z0-9]/g,''); });
@@ -829,6 +1316,13 @@
     document.getElementById('joinBtn').disabled = true;
     teardownPeer();
     peer = new Peer();
+    peer.on('call', (incomingCall)=>{
+      incomingCall.answer();
+      incomingCall.on('stream', (remoteStream)=>{
+        const v = document.getElementById('remoteVideo');
+        if(v) v.srcObject = remoteStream;
+      });
+    });
     let settled = false;
     const failTimeout = setTimeout(()=>{
       if(!settled){ settled=true; errEl.textContent='接続できませんでした。コードを確認してもう一度お試しください。'; document.getElementById('joinBtn').disabled=false; teardownPeer(); }
@@ -866,10 +1360,38 @@
         document.getElementById('spotterPanel').classList.remove('hidden');
         document.getElementById('playerPanel').classList.add('hidden');
         showGame(); resizeCanvases(); lastT=null; seenEventSeq=0;
+        playTitleBGM();
       }
     } else if(msg.type==='state'){
       netPlayer = msg;
       if(netMelon){ netMelon.integrity = msg.integrity; if(msg.hits) netMelon.hits = msg.hits; }
+    } else if(msg.type==='ghost_world'){
+      netGhosts = [];
+      ghostState='playing'; ghostSeenEventSeq=0;
+      showGhostGame();
+      document.getElementById('ghostSpotterPanel').classList.remove('hidden');
+      document.getElementById('ghostPlayerPanel').classList.add('hidden');
+      playGhostBGM();
+    } else if(msg.type==='ghost_state'){
+      netGhostPlayerHeading = msg.heading;
+      if(msg.ghosts) netGhosts = msg.ghosts;
+      document.getElementById('ghostReadoutTime').textContent='残り'+Math.ceil(msg.time)+'s';
+      document.getElementById('ghostReadoutCaught').textContent='捕獲 '+(msg.captured||0)+'体';
+      if(msg.lastEvent && msg.lastEvent.seq>ghostSeenEventSeq){
+        ghostSeenEventSeq = msg.lastEvent.seq;
+        if(msg.lastEvent.type==='catch'){
+          playOneShot(seShutter);
+          const c = msg.lastEvent.count||1;
+          showToastOn('ghostSpotterToast', c>1 ? ('📸 '+c+'体まとめてキャッチ！') : '📸 キャッチ！', 'good');
+        }
+        else if(msg.lastEvent.type==='miss'){ sfxMiss(); showToastOn('ghostSpotterToast','空振り…','bad'); }
+        else if(msg.lastEvent.type==='time30'){ playOneShot(se30); }
+        else if(msg.lastEvent.type==='time15'){ playOneShot(se15); }
+      }
+      if(msg.ended){
+        ghostState='ended';
+        showGhostResult(msg.captured||0, msg.maxCombo||0, msg.elapsed||0);
+      }
     }
   }
 
@@ -878,27 +1400,33 @@
     // Until then, keep the "waiting for player" screen visible.
   }
 
-  // ================= Retry (loop back to Title, keep connection alive) =================
-  document.getElementById('retryBtn').addEventListener('click', ()=>{
-    clearTimers(); // stop the old per-round state-sender interval; a fresh one starts on next beginPlayerGame()
-    document.getElementById('scrResult').classList.add('hidden');
-    netPlayer=null; netMelon=null; netHoles=null; gameState='idle';
+  // ================= Return to hub (keep connection alive, loop back to Title/waiting) =================
+  function returnToHub(){
+    clearTimers();
+    if(localCamStream){ localCamStream.getTracks().forEach(t=>t.stop()); localCamStream=null; }
+    netPlayer=null; netMelon=null; netHoles=null; netGhosts=null;
+    gameState='idle'; ghostState='idle';
 
     if(role==='player'){
-      document.getElementById('hostHeading').textContent = '🍉 目隠しスイカ割り';
-      document.getElementById('hostSub').textContent = '準備ができたら、下のボタンでもう一度スタートできます。';
-      document.getElementById('hostWaitStatus').textContent = (conn && conn.open) ? '✅ 観測者と接続中です' : '(観測者なし・ソロモード)';
-      document.getElementById('hostStartBtn').disabled = false;
-      showScreen('scrHost');
+      goToTitle((conn && conn.open) ? '✅ 観測者と接続中です' : '(観測者なし・ソロモード)');
     } else if(role==='spotter'){
-      seenEventSeq = 0;
-      document.getElementById('joinWaitHeading').textContent = '🍉 目隠しスイカ割り';
-      document.getElementById('joinWaitSub').textContent = '次のラウンドが始まるのを待っています。';
+      seenEventSeq = 0; ghostSeenEventSeq = 0;
+      document.getElementById('joinWaitHeading').textContent = '🎮 つぎのゲームを待っています';
+      document.getElementById('joinWaitSub').textContent = 'プレイヤーが次のゲームを選ぶまでお待ちください。';
       showScreen('scrJoinWait');
     } else {
       teardownPeer(); role=null; roomCode=null;
       showScreen('scrRole');
     }
+  }
+
+  document.getElementById('retryBtn').addEventListener('click', ()=>{
+    document.getElementById('scrResult').classList.add('hidden');
+    returnToHub();
+  });
+  document.getElementById('ghostRetryBtn').addEventListener('click', ()=>{
+    document.getElementById('scrGhostResult').classList.add('hidden');
+    returnToHub();
   });
 
   resizeCanvases();
