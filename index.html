@@ -943,15 +943,26 @@
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
     if(!netGhosts) return;
+
+    // Figure out the actual rendered video rectangle (object-fit:contain letterboxes
+    // it within the panel), so ghosts are only ever drawn on top of real video content.
+    const videoEl = document.getElementById('remoteVideo');
+    let vx=0, vy=0, vw=canvas.width, vh=canvas.height;
+    if(videoEl && videoEl.videoWidth && videoEl.videoHeight){
+      const vRatio = videoEl.videoWidth/videoEl.videoHeight, cRatio = canvas.width/canvas.height;
+      if(vRatio > cRatio){ vw=canvas.width; vh=canvas.width/vRatio; vx=0; vy=(canvas.height-vh)/2; }
+      else { vh=canvas.height; vw=canvas.height*vRatio; vy=0; vx=(canvas.width-vw)/2; }
+    }
+
     for(const g of netGhosts){
       if(!g.active) continue;
       let diff = g.heading - netGhostPlayerHeading;
       while(diff>Math.PI) diff-=Math.PI*2;
       while(diff<-Math.PI) diff+=Math.PI*2;
       if(Math.abs(diff) > GHOST_OVERLAY_FOV/2) continue;
-      const sx = canvas.width/2 + (diff/(GHOST_OVERLAY_FOV/2))*(canvas.width/2)*0.92;
-      const sy = canvas.height*(g.vy!==undefined?g.vy:0.5);
-      const size = canvas.width*0.1;
+      const sx = vx + vw/2 + (diff/(GHOST_OVERLAY_FOV/2))*(vw/2)*0.92;
+      const sy = vy + vh*(g.vy!==undefined?g.vy:0.5);
+      const size = vw*0.1;
       ctx.font = size+'px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.shadowColor='rgba(143,127,232,0.95)'; ctx.shadowBlur=Math.max(10,size*0.4);
