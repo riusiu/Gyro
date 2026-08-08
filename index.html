@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>目隠しスイカ割り(2台版・WebRTC) | Blind Suika Wari</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
   .display{font-family:'Baloo 2',sans-serif;}
   .mono{font-family:'JetBrains Mono',monospace;}
 
-  #app{position:relative; width:100vw; height:100vh; background:var(--ink);}
+  #app{position:relative; width:100vw; height:100vh; height:100dvh; height:calc(var(--app-height, 100vh)); background:var(--ink);}
   .screen{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:20;
     background:radial-gradient(circle at 30% 20%, rgba(90,42,94,.55), rgba(18,11,23,.96) 70%);}
   .screen.hidden{display:none;}
@@ -347,6 +347,19 @@
 <script>
 (function(){
   "use strict";
+
+  // ================= Dynamic viewport height fix =================
+  // 100vh on mobile browsers often includes space under a collapsible address
+  // bar, causing bottom-anchored buttons to sit off-screen or drift depending
+  // on the device/browser. This keeps a CSS var in sync with the real visible height.
+  function setAppHeight(){
+    const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', h+'px');
+  }
+  setAppHeight();
+  window.addEventListener('resize', setAppHeight);
+  window.addEventListener('orientationchange', ()=> setTimeout(setAppHeight, 100));
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', setAppHeight);
 
   // ================= PeerJS (WebRTC) helpers =================
   const PEER_PREFIX = 'suikawari5-';
@@ -1025,7 +1038,14 @@
       localCamStream = newStream;
       camVideoEl.srcObject = newStream;
       camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
-      camFacingOffset = useFront ? Math.PI : 0;
+      const newOffset = useFront ? Math.PI : 0;
+      const delta = newOffset - camFacingOffset;
+      if(delta !== 0){
+        for(const g of ghosts){
+          g.heading = ((g.heading+delta)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+        }
+      }
+      camFacingOffset = newOffset;
       ghostUsingFront = useFront;
       if(conn && conn.open && peer){
         try{ peer.call(conn.peer, localCamStream); }catch(e){}
