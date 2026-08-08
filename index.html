@@ -285,11 +285,14 @@
         <div class="stat-corner"><span id="ghostStatTime">⏱ 60s</span><span id="ghostStatCaught">👻 0/0</span></div>
         <div class="toast" id="ghostToast">-</div>
       </div>
-      <label class="gyro-toggle" style="top:calc(46px + env(safe-area-inset-top)); pointer-events:auto;" id="ghostCamToggleRow">
-        <input type="checkbox" id="ghostCamLiveToggle">内カメラ(自撮り)に切替
-      </label>
       <div class="touch-controls">
-        <div class="ctrl-btn" id="btnCapture" style="left:50%; right:auto; transform:translateX(-50%); width:110px; height:110px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #ffe08a, #ff9457 70%); border:2px solid rgba(255,255,255,.4); color:#2a1a0f; font-size:15px; bottom:calc(40px + env(safe-area-inset-bottom));">📸<br>キャッチ</div>
+        <div class="ctrl-btn" id="btnCapture" style="left:44%; right:auto; transform:translateX(-50%); width:104px; height:104px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #ffe08a, #ff9457 70%); border:2px solid rgba(255,255,255,.4); color:#2a1a0f; font-size:15px; bottom:calc(48px + env(safe-area-inset-bottom));">📸<br>キャッチ</div>
+        <div class="ctrl-btn" id="btnCamFlip" style="left:auto; right:calc(18px + env(safe-area-inset-right)); width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.32); bottom:calc(66px + env(safe-area-inset-bottom));">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 2l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <path d="M7 22l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+          </svg>
+        </div>
       </div>
     </div>
     <div class="panel hidden" id="ghostSpotterPanel">
@@ -331,8 +334,8 @@
         <div><p class="grade-title display" id="ghostGradeTitle">ゆうれいハンター！</p><p class="grade-desc" id="ghostGradeDesc">見事な腕前でした。</p></div>
       </div>
       <div class="result-stats">
-        <div><div class="val" id="ghostStatCapturedFinal">0/0</div><div class="lbl">捕獲数</div></div>
-        <div><div class="val" id="ghostStatRate">0%</div><div class="lbl">捕獲率</div></div>
+        <div><div class="val" id="ghostStatCapturedFinal">0体</div><div class="lbl">捕獲数</div></div>
+        <div><div class="val" id="ghostStatRate">0体</div><div class="lbl">最大同時討伐</div></div>
         <div><div class="val" id="ghostStatFinalTime">0.0s</div><div class="lbl">タイム</div></div>
       </div>
       <button class="btn" id="ghostRetryBtn">タイトルへ戻る</button>
@@ -409,14 +412,16 @@
 
   // ================= World / game state =================
   const WORLD_W=20, WORLD_H=20, TIME_LIMIT=60;
-  const GHOST_TIME_LIMIT=60, GHOST_CAPTURE_TOLERANCE=0.22, GHOST_OVERLAY_FOV=1.1;
+  const GHOST_TIME_LIMIT=60, GHOST_CAPTURE_TOLERANCE=0.22, GHOST_OVERLAY_FOV=1.1, MAX_GHOSTS=8;
   let ghostState='idle'; // 'idle' | 'playing' | 'ended'
-  let ghosts=[]; // host-side: [{id, heading, vy, captured}]
-  let ghostStats={time:GHOST_TIME_LIMIT, elapsed:0, captured:0};
+  let ghosts=[]; // host-side: fixed pool of MAX_GHOSTS slots: [{id, active, heading, vy, respawnAt}]
+  let ghostHotspots=[];
+  let ghostStats={time:GHOST_TIME_LIMIT, elapsed:0, captured:0, maxCombo:0};
   let ghostLastEvent={type:null, seq:0};
   let localCamStream=null;
   let netGhosts=null, netGhostPlayerHeading=0, ghostSeenEventSeq=0;
   let camFacingOffset=0; // 0 = back camera, Math.PI = front camera (it faces the opposite way)
+  let ghostUsingFront=false;
   let player, melon, holes, keys, swing, stats, gameState='idle';
   let lastEvent = {type:null, seq:0, accuracy:0};
 
@@ -912,7 +917,7 @@
     ctx.clearRect(0,0,canvas.width,canvas.height);
     if(!netGhosts) return;
     for(const g of netGhosts){
-      if(g.captured) continue;
+      if(!g.active) continue;
       let diff = g.heading - netGhostPlayerHeading;
       while(diff>Math.PI) diff-=Math.PI*2;
       while(diff<-Math.PI) diff+=Math.PI*2;
@@ -1002,9 +1007,10 @@
     capBtn.addEventListener('touchstart', tap, {passive:false});
     capBtn.addEventListener('mousedown', tap);
 
-    document.getElementById('ghostCamLiveToggle').addEventListener('change', (e)=>{
-      switchGhostCamera(e.target.checked);
-    });
+    const flipBtn=document.getElementById('btnCamFlip');
+    const flipTap=(e)=>{ e.preventDefault(); switchGhostCamera(!ghostUsingFront); };
+    flipBtn.addEventListener('touchstart', flipTap, {passive:false});
+    flipBtn.addEventListener('mousedown', flipTap);
   }
 
   async function switchGhostCamera(useFront){
@@ -1020,7 +1026,7 @@
       camVideoEl.srcObject = newStream;
       camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
       camFacingOffset = useFront ? Math.PI : 0;
-      document.getElementById('ghostCamLiveToggle').checked = useFront;
+      ghostUsingFront = useFront;
       if(conn && conn.open && peer){
         try{ peer.call(conn.peer, localCamStream); }catch(e){}
       }
@@ -1028,10 +1034,8 @@
     }catch(e){
       console.warn('camera switch failed', e);
       showToastOn('ghostToast','カメラ切替失敗: '+(e&&e.name?e.name:'不明なエラー'),'bad');
-      document.getElementById('ghostCamLiveToggle').checked = !useFront;
     }
   }
-
 
   async function beginGhostGame(){
     const useFront = document.getElementById('ghostFrontCamToggle').checked;
@@ -1045,29 +1049,22 @@
     ensureAudio();
     localCamStream = stream;
     camFacingOffset = useFront ? Math.PI : 0;
+    ghostUsingFront = useFront;
     const camVideoEl = document.getElementById('camVideo');
     camVideoEl.srcObject = stream;
     camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
-    document.getElementById('ghostCamLiveToggle').checked = useFront;
     if(!ghostControlsInitialized){ initGhostControls(); ghostControlsInitialized=true; }
     if(window._enableGyroIfChecked) window._enableGyroIfChecked();
 
-    // Generate ghosts: mostly clustered around 1-2 "hotspot" directions so the
-    // spotter's callouts ("over there!") are actually meaningful, plus a few scattered.
-    const total = 8;
-    const hotspots = [Math.random()*Math.PI*2, Math.random()*Math.PI*2];
+    // Ghosts spawn clustered around 1-2 "hotspot" directions (so the spotter's
+    // callouts are meaningful), stay at MAX_GHOSTS concurrently, and respawn
+    // elsewhere after a random delay once caught.
+    ghostHotspots = [Math.random()*Math.PI*2, Math.random()*Math.PI*2];
     ghosts = [];
-    for(let i=0;i<total;i++){
-      let heading;
-      if(i < Math.round(total*0.7)){
-        heading = hotspots[i%2] + (Math.random()*0.7-0.35);
-      } else {
-        heading = Math.random()*Math.PI*2;
-      }
-      heading = ((heading%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
-      ghosts.push({id:'g'+i, heading, vy:0.22+Math.random()*0.5, captured:false});
+    for(let i=0;i<MAX_GHOSTS;i++){
+      ghosts.push({id:'g'+i, active:true, heading:randomGhostHeading(), vy:0.22+Math.random()*0.5, respawnAt:0});
     }
-    ghostStats = {time:GHOST_TIME_LIMIT, elapsed:0, captured:0};
+    ghostStats = {time:GHOST_TIME_LIMIT, elapsed:0, captured:0, maxCombo:0};
     ghostLastEvent = {type:null, seq:0};
     ghostState='playing';
     showGhostGame();
@@ -1076,7 +1073,7 @@
 
     if(conn && conn.open){
       try{
-        conn.send({type:'ghost_world', ghosts: ghosts.map(g=>({id:g.id, heading:g.heading, vy:g.vy})), duration:GHOST_TIME_LIMIT});
+        conn.send({type:'ghost_world', duration:GHOST_TIME_LIMIT, maxGhosts:MAX_GHOSTS});
         if(peer) peer.call(conn.peer, localCamStream);
       }catch(e){}
     }
@@ -1085,13 +1082,21 @@
       if(ghostState!=='playing') return;
       ghostStats.elapsed += 0.15;
       ghostStats.time -= 0.15;
+      const now = performance.now();
+      for(const g of ghosts){
+        if(!g.active && now>=g.respawnAt){
+          g.active=true; g.heading=randomGhostHeading(); g.vy=0.22+Math.random()*0.5;
+        }
+      }
       const heading = currentGhostHeading();
       document.getElementById('ghostStatTime').textContent='⏱ 残り'+Math.ceil(Math.max(0,ghostStats.time))+'s';
-      document.getElementById('ghostStatCaught').textContent='👻 '+ghostStats.captured+'/'+ghosts.length;
+      document.getElementById('ghostStatCaught').textContent='👻 捕獲 '+ghostStats.captured;
       if(conn && conn.open){
         try{
-          conn.send({type:'ghost_state', heading, capturedIds: ghosts.filter(g=>g.captured).map(g=>g.id),
-            time:Math.max(0,ghostStats.time), elapsed:ghostStats.elapsed, lastEvent:ghostLastEvent, ended:false});
+          conn.send({type:'ghost_state', heading,
+            ghosts: ghosts.map(g=>({id:g.id, heading:g.heading, active:g.active, vy:g.vy})),
+            time:Math.max(0,ghostStats.time), elapsed:ghostStats.elapsed, captured:ghostStats.captured,
+            lastEvent:ghostLastEvent, ended:false});
         }catch(e){}
       }
       if(ghostStats.time<=0){ endGhostGame(); }
@@ -1099,23 +1104,39 @@
     timers.push(t);
   }
 
+  function randomGhostHeading(){
+    let heading;
+    if(Math.random() < 0.7 && ghostHotspots.length){
+      const hs = ghostHotspots[Math.floor(Math.random()*ghostHotspots.length)];
+      heading = hs + (Math.random()*0.7-0.35);
+    } else {
+      heading = Math.random()*Math.PI*2;
+    }
+    return ((heading%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+  }
+
   function tryCapture(){
     if(ghostState!=='playing') return;
     const heading = currentGhostHeading();
-    let best=null, bestDiff=Infinity;
+    let caughtCount = 0;
+    const now = performance.now();
     for(const g of ghosts){
-      if(g.captured) continue;
+      if(!g.active) continue;
       let diff = g.heading-heading;
       while(diff>Math.PI) diff-=Math.PI*2;
       while(diff<-Math.PI) diff+=Math.PI*2;
-      diff = Math.abs(diff);
-      if(diff<bestDiff){ bestDiff=diff; best=g; }
+      if(Math.abs(diff) <= GHOST_CAPTURE_TOLERANCE){
+        g.active=false;
+        g.respawnAt = now + (2000+Math.random()*4000); // respawn somewhere else after 2-6s
+        caughtCount++;
+      }
     }
-    if(best && bestDiff<=GHOST_CAPTURE_TOLERANCE){
-      best.captured=true; ghostStats.captured++;
-      sfxHit(90); showToastOn('ghostToast','📸 ゲット！','good');
-      ghostLastEvent={type:'catch', seq:ghostLastEvent.seq+1};
-      if(ghosts.every(g=>g.captured)) endGhostGame();
+    if(caughtCount>0){
+      ghostStats.captured += caughtCount;
+      if(caughtCount>ghostStats.maxCombo) ghostStats.maxCombo=caughtCount;
+      sfxHit(90);
+      showToastOn('ghostToast', caughtCount>1 ? ('📸 '+caughtCount+'体まとめてゲット！') : '📸 ゲット！', 'good');
+      ghostLastEvent={type:'catch', seq:ghostLastEvent.seq+1, count:caughtCount};
     } else {
       sfxMiss(); showToastOn('ghostToast','うーん、いない…','bad');
       ghostLastEvent={type:'miss', seq:ghostLastEvent.seq+1};
@@ -1129,26 +1150,26 @@
     if(localCamStream){ localCamStream.getTracks().forEach(tr=>tr.stop()); localCamStream=null; }
     if(conn && conn.open){
       try{
-        conn.send({type:'ghost_state', heading:0, capturedIds: ghosts.filter(g=>g.captured).map(g=>g.id),
-          time:0, elapsed:ghostStats.elapsed, lastEvent:ghostLastEvent, ended:true,
-          captured:ghostStats.captured, total:ghosts.length});
+        conn.send({type:'ghost_state', heading:0,
+          ghosts: ghosts.map(g=>({id:g.id, heading:g.heading, active:g.active, vy:g.vy})),
+          time:0, elapsed:ghostStats.elapsed, captured:ghostStats.captured, maxCombo:ghostStats.maxCombo,
+          lastEvent:ghostLastEvent, ended:true});
       }catch(e){}
     }
-    showGhostResult(ghostStats.captured, ghosts.length, ghostStats.elapsed);
+    showGhostResult(ghostStats.captured, ghostStats.maxCombo, ghostStats.elapsed);
   }
 
-  function showGhostResult(captured, total, elapsed){
-    const rate = total>0 ? Math.round(captured/total*100) : 0;
+  function showGhostResult(captured, maxCombo, elapsed){
     let title,desc,emoji;
-    if(rate>=100){ title='パーフェクトハンター！'; desc='全員捕まえました！'; emoji='🏆'; }
-    else if(rate>=70){ title='ナイスハント！'; desc='かなり捕まえました。'; emoji='👻'; }
-    else if(rate>=40){ title='まずまずの成果'; desc='半分近く捕まえました。'; emoji='🔦'; }
+    if(captured>=16){ title='パーフェクトハンター！'; desc='ものすごい捕獲数でした！'; emoji='🏆'; }
+    else if(captured>=10){ title='ナイスハント！'; desc='かなり捕まえました。'; emoji='👻'; }
+    else if(captured>=5){ title='まずまずの成果'; desc='いいペースで捕まえられました。'; emoji='🔦'; }
     else { title='もう少し…'; desc='声かけを頼りに再挑戦しよう。'; emoji='🌫️'; }
     document.getElementById('ghostGradeCircle').textContent=emoji;
     document.getElementById('ghostGradeTitle').textContent=title;
     document.getElementById('ghostGradeDesc').textContent=desc;
-    document.getElementById('ghostStatCapturedFinal').textContent=captured+'/'+total;
-    document.getElementById('ghostStatRate').textContent=rate+'%';
+    document.getElementById('ghostStatCapturedFinal').textContent=captured+'体';
+    document.getElementById('ghostStatRate').textContent=maxCombo+'体';
     document.getElementById('ghostStatFinalTime').textContent=elapsed.toFixed(1)+'s';
     setTimeout(()=>{ document.getElementById('scrGhostResult').classList.remove('hidden'); document.getElementById('ghostView').classList.add('hidden'); }, 400);
   }
@@ -1217,26 +1238,28 @@
       netPlayer = msg;
       if(netMelon){ netMelon.integrity = msg.integrity; if(msg.hits) netMelon.hits = msg.hits; }
     } else if(msg.type==='ghost_world'){
-      netGhosts = msg.ghosts.map(g=>Object.assign({captured:false}, g));
+      netGhosts = [];
       ghostState='playing'; ghostSeenEventSeq=0;
       showGhostGame();
       document.getElementById('ghostSpotterPanel').classList.remove('hidden');
       document.getElementById('ghostPlayerPanel').classList.add('hidden');
     } else if(msg.type==='ghost_state'){
       netGhostPlayerHeading = msg.heading;
-      if(netGhosts && msg.capturedIds){ netGhosts.forEach(g=> g.captured = msg.capturedIds.includes(g.id)); }
+      if(msg.ghosts) netGhosts = msg.ghosts;
       document.getElementById('ghostReadoutTime').textContent='残り'+Math.ceil(msg.time)+'s';
-      document.getElementById('ghostReadoutCaught').textContent=(msg.capturedIds?msg.capturedIds.length:0)+'/'+(netGhosts?netGhosts.length:0)+' 匹';
+      document.getElementById('ghostReadoutCaught').textContent='捕獲 '+(msg.captured||0)+'体';
       if(msg.lastEvent && msg.lastEvent.seq>ghostSeenEventSeq){
         ghostSeenEventSeq = msg.lastEvent.seq;
-        if(msg.lastEvent.type==='catch'){ sfxHit(90); showToastOn('ghostSpotterToast','📸 キャッチ！','good'); }
+        if(msg.lastEvent.type==='catch'){
+          sfxHit(90);
+          const c = msg.lastEvent.count||1;
+          showToastOn('ghostSpotterToast', c>1 ? ('📸 '+c+'体まとめてキャッチ！') : '📸 キャッチ！', 'good');
+        }
         else if(msg.lastEvent.type==='miss'){ sfxMiss(); showToastOn('ghostSpotterToast','空振り…','bad'); }
       }
       if(msg.ended){
         ghostState='ended';
-        const cap = msg.captured!==undefined ? msg.captured : (msg.capturedIds?msg.capturedIds.length:0);
-        const tot = msg.total!==undefined ? msg.total : (netGhosts?netGhosts.length:0);
-        showGhostResult(cap, tot, msg.elapsed||0);
+        showGhostResult(msg.captured||0, msg.maxCombo||0, msg.elapsed||0);
       }
     }
   }
