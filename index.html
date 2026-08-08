@@ -208,32 +208,25 @@
 
   <!-- Title (post-connection hub) -->
   <div class="screen hidden" id="scrTitle">
-    <div class="card" style="text-align:center;">
-      <img src="natunokoe.png" alt="夏の声" style="width:100%; border-radius:14px; margin-bottom:16px; box-shadow:0 10px 24px rgba(0,0,0,.4);">
-      <p class="sub" id="titleStatus">準備ができました。</p>
-      <button class="btn" id="titleToSelectBtn">ゲームをえらぶ</button>
-      <button class="btn ghost" id="titleBackBtn">役割選択に戻る</button>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px; width:min(92vw,900px);">
+      <div style="position:relative; width:100%; aspect-ratio:16/9; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px rgba(0,0,0,.4);">
+        <img src="title.jpg" alt="夏の声" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;">
+        <button id="titleToSelectBtn" aria-label="スタート" style="position:absolute; left:81%; top:50%; width:23%; height:36%; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
+      </div>
+      <p class="sub" id="titleStatus" style="text-align:center; margin:0;">準備ができました。</p>
+      <button class="btn ghost" id="titleBackBtn" style="max-width:280px;">役割選択に戻る</button>
     </div>
   </div>
 
   <!-- Game select -->
   <div class="screen hidden" id="scrGameSelect">
-    <div class="card">
-      <h1 class="display">あそぶゲームをえらぶ</h1>
-      <p class="sub">遊びたいゲームを選んでください。</p>
-      <div class="role-grid">
-        <div class="role-card" id="pickSuika">
-          <span class="emoji">🍉</span>
-          <div class="name">スイカ割り</div>
-          <div class="desc">目隠しで歩き回って<br>一撃で狙う</div>
-        </div>
-        <div class="role-card" id="pickGhost">
-          <span class="emoji">👻</span>
-          <div class="name">ゆうれい探し</div>
-          <div class="desc">スマホのカメラで<br>ゆうれいを捕まえる</div>
-        </div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:12px; width:min(94vw,960px);">
+      <div style="position:relative; width:100%; aspect-ratio:16/9; border-radius:16px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.5);">
+        <img src="senntakugamenn.jpg" alt="ゲームをえらぶ" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;">
+        <button id="pickGhost" aria-label="ゆうれい探し" style="position:absolute; left:29.8%; top:27.2%; width:13.6%; aspect-ratio:1/1; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
+        <button id="pickSuika" aria-label="スイカ割り" style="position:absolute; left:79.2%; top:67.2%; width:17.4%; aspect-ratio:1/1; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
       </div>
-      <label style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; font-size:12.5px; color:var(--text-dim);">
+      <label style="display:flex; align-items:center; justify-content:center; gap:8px; font-size:12.5px; color:var(--text-dim);">
         <input type="checkbox" id="ghostFrontCamToggle" style="transform:scale(0.9);"> ゆうれい探しで内カメラ(自撮り側)を使う
       </label>
     </div>
@@ -299,7 +292,7 @@
       </div>
     </div>
     <div class="panel hidden" id="ghostSpotterPanel">
-      <video id="remoteVideo" autoplay playsinline muted style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000;"></video>
+      <video id="remoteVideo" autoplay playsinline muted style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background-color:#05070f; background-image:url('nightbacklayer4.jpg'); background-size:cover; background-position:center;"></video>
       <canvas id="ghostOverlayCanvas" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
       <div class="tag spotter"><span class="dot"></span>観測者ビュー(カメラ映像)</div>
       <div class="toast" id="ghostSpotterToast">-</div>
@@ -655,6 +648,7 @@
   const melonWholeImg = new Image(); melonWholeImg.src = 'suika.png';
   const melonBrokenImg = new Image(); melonBrokenImg.src = 'suika_bre.png';
   const stickImg = new Image(); stickImg.src = 'suica_Stick.png';
+  const bgBeachImg = new Image(); bgBeachImg.src = 'Backbeach.jpg';
 
   function drawMelonSprite(ctx,cx,cy,size,integrity){
     const img = integrity>0 ? melonWholeImg : melonBrokenImg;
@@ -740,7 +734,8 @@
     const marginX=W*0.06, marginY=H*0.06, usableW=W-marginX*2, usableH=H-marginY*2;
     const sx=(wx)=>marginX+(wx/WORLD_W)*usableW, sy=(wy)=>marginY+(wy/WORLD_H)*usableH;
     const scale=usableW/WORLD_W;
-    tctx.fillStyle='#f2cd7e'; tctx.fillRect(0,0,W,H);
+    if(bgBeachImg.complete && bgBeachImg.naturalWidth>0){ tctx.drawImage(bgBeachImg,0,0,W,H); }
+    else { tctx.fillStyle='#f2cd7e'; tctx.fillRect(0,0,W,H); }
     tctx.strokeStyle='rgba(0,0,0,0.05)'; tctx.lineWidth=1;
     for(let i=0;i<=WORLD_W;i+=2){ tctx.beginPath(); tctx.moveTo(sx(i),marginY); tctx.lineTo(sx(i),H-marginY); tctx.stroke(); }
     for(let j=0;j<=WORLD_H;j+=2){ tctx.beginPath(); tctx.moveTo(marginX,sy(j)); tctx.lineTo(W-marginX,sy(j)); tctx.stroke(); }
