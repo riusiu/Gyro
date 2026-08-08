@@ -979,7 +979,7 @@
       if(netPlayer.lastEvent && netPlayer.lastEvent.seq>seenEventSeq){
         seenEventSeq=netPlayer.lastEvent.seq;
         const ev=netPlayer.lastEvent;
-        if(ev.type==='hit'){ sfxHit(ev.accuracy); showToast(ev.accuracy>=85?'パーン！会心の一撃！':'ナイスヒット！','good'); }
+        if(ev.type==='hit'){ showToast(ev.accuracy>=85?'パーン！会心の一撃！':'ナイスヒット！','good'); }
         else if(ev.type==='miss'){ sfxMiss(); showToast('空振り！','bad'); }
         else if(ev.type==='stumble'){ sfxStumble(); showToast('穴にハマった！','bad'); }
         else if(ev.type==='time30'){ playOneShot(se30); }
@@ -987,7 +987,7 @@
       }
       if(netPlayer.ended){
         gameState='ended';
-        if(netPlayer.timedOut) sfxMiss(); else sfxBreak();
+        if(netPlayer.timedOut) sfxMiss(); else playOneShot(seSuika);
         showResult(netMelon&&netMelon.hits?netMelon.hits:(netPlayer.hits||[]), netPlayer.elapsed||0, !!netPlayer.timedOut);
       }
     }
@@ -1360,6 +1360,7 @@
         document.getElementById('spotterPanel').classList.remove('hidden');
         document.getElementById('playerPanel').classList.add('hidden');
         showGame(); resizeCanvases(); lastT=null; seenEventSeq=0;
+        playTitleBGM();
       }
     } else if(msg.type==='state'){
       netPlayer = msg;
@@ -1370,6 +1371,7 @@
       showGhostGame();
       document.getElementById('ghostSpotterPanel').classList.remove('hidden');
       document.getElementById('ghostPlayerPanel').classList.add('hidden');
+      playGhostBGM();
     } else if(msg.type==='ghost_state'){
       netGhostPlayerHeading = msg.heading;
       if(msg.ghosts) netGhosts = msg.ghosts;
@@ -1378,7 +1380,7 @@
       if(msg.lastEvent && msg.lastEvent.seq>ghostSeenEventSeq){
         ghostSeenEventSeq = msg.lastEvent.seq;
         if(msg.lastEvent.type==='catch'){
-          sfxHit(90);
+          playOneShot(seShutter);
           const c = msg.lastEvent.count||1;
           showToastOn('ghostSpotterToast', c>1 ? ('📸 '+c+'体まとめてキャッチ！') : '📸 キャッチ！', 'good');
         }
