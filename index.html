@@ -1009,10 +1009,14 @@
 
   async function switchGhostCamera(useFront){
     try{
-      const newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode: useFront?'user':'environment'}, audio:false});
-      if(localCamStream){ localCamStream.getTracks().forEach(tr=>tr.stop()); }
-      localCamStream = newStream;
+      if(localCamStream){ localCamStream.getTracks().forEach(tr=>tr.stop()); localCamStream=null; }
       const camVideoEl = document.getElementById('camVideo');
+      camVideoEl.srcObject = null;
+      // Small delay: on many phones the camera hardware needs a beat to release
+      // after stopping a track before it can be reopened with a different facingMode.
+      await new Promise(r=>setTimeout(r,150));
+      const newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode: useFront?'user':'environment'}, audio:false});
+      localCamStream = newStream;
       camVideoEl.srcObject = newStream;
       camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
       camFacingOffset = useFront ? Math.PI : 0;
@@ -1022,9 +1026,12 @@
       }
       showToastOn('ghostToast', useFront?'内カメラに切替':'外カメラに切替', 'good');
     }catch(e){
-      showToastOn('ghostToast','カメラの切り替えに失敗しました','bad');
+      console.warn('camera switch failed', e);
+      showToastOn('ghostToast','カメラ切替失敗: '+(e&&e.name?e.name:'不明なエラー'),'bad');
+      document.getElementById('ghostCamLiveToggle').checked = !useFront;
     }
   }
+
 
   async function beginGhostGame(){
     const useFront = document.getElementById('ghostFrontCamToggle').checked;
