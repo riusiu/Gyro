@@ -146,6 +146,7 @@
 </style>
 </head>
 <body>
+<div id="fadeOverlay" style="position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; z-index:9999;"></div>
 <div id="app">
 
   <!-- Role select -->
@@ -381,16 +382,19 @@
   // ================= Screen helpers =================
   const screens = ['scrRole','scrHost','scrJoin','scrJoinWait','scrTitle','scrGameSelect','scrResult','scrGhostResult'];
   function showScreen(id){
+    flashTransition();
     screens.forEach(s=> document.getElementById(s).classList.toggle('hidden', s!==id));
     document.getElementById('gameView').classList.add('hidden');
     document.getElementById('ghostView').classList.add('hidden');
   }
   function showGame(){
+    flashTransition();
     screens.forEach(s=> document.getElementById(s).classList.add('hidden'));
     document.getElementById('gameView').classList.remove('hidden');
     document.getElementById('ghostView').classList.add('hidden');
   }
   function showGhostGame(){
+    flashTransition();
     screens.forEach(s=> document.getElementById(s).classList.add('hidden'));
     document.getElementById('gameView').classList.add('hidden');
     document.getElementById('ghostView').classList.remove('hidden');
@@ -398,6 +402,7 @@
   function goToTitle(statusText){
     document.getElementById('titleStatus').textContent = statusText;
     showScreen('scrTitle');
+    playTitleBGM();
   }
 
   let role = null;      // 'player' | 'spotter'
@@ -424,6 +429,63 @@
   function sfxMiss(){ beep(180,0.22,'sawtooth',0.12); }
   function sfxStumble(){ beep(90,0.3,'square',0.2); beep(70,0.35,'square',0.15,0.05); }
   function sfxBreak(){ [0,0.08,0.16,0.28].forEach((d,i)=>beep(260-i*30,0.3,'square',0.22,d)); beep(880,0.5,'sine',0.15,0.3); beep(1100,0.6,'sine',0.12,0.4); }
+
+  // ================= Audio assets (BGM / SE files) =================
+  function mkAudio(src, loop, volume){
+    const a = new Audio(src);
+    a.loop = !!loop;
+    a.volume = volume!==undefined ? volume : 1;
+    a.preload = 'auto';
+    return a;
+  }
+  const bgmSummer = mkAudio('Summer.mp3', true, 0.55);
+  const bgmFrog   = mkAudio('frog.mp3',   true, 0.4);
+  const bgmRiver  = mkAudio('River.mp3',  true, 0.35);
+  const seSand    = mkAudio('sand.mp3',   true, 0.4);
+  const seShutter = mkAudio('Shutter.mp3',false, 0.85);
+  const seSnap    = mkAudio('Snap.mp3',   false, 0.85);
+  const seSuika   = mkAudio('suika.mp3',  false, 0.9);
+  const se15      = mkAudio('15.mp3',     false, 0.8);
+  const se30      = mkAudio('30.mp3',     false, 0.8);
+  const seFade    = mkAudio('fade.mp3',   false, 0.6);
+
+  function playOneShot(a){ try{ a.currentTime=0; a.play().catch(()=>{}); }catch(e){} }
+  function stopAudio(a){ try{ a.pause(); a.currentTime=0; }catch(e){} }
+  function fadeStopAudio(a, ms){
+    if(a.paused) return;
+    ms = ms||400;
+    const startVol = a.volume, steps=8, stepMs=ms/steps;
+    let i=0;
+    const iv = setInterval(()=>{
+      i++; a.volume = Math.max(0, startVol*(1-i/steps));
+      if(i>=steps){ clearInterval(iv); stopAudio(a); a.volume=startVol; }
+    }, stepMs);
+  }
+  function playTitleBGM(){
+    fadeStopAudio(bgmFrog); fadeStopAudio(bgmRiver);
+    if(bgmSummer.paused) bgmSummer.play().catch(()=>{});
+  }
+  function playGhostBGM(){
+    fadeStopAudio(bgmSummer);
+    if(bgmFrog.paused) bgmFrog.play().catch(()=>{});
+    if(bgmRiver.paused) bgmRiver.play().catch(()=>{});
+  }
+  function setFootstepPlaying(on){
+    if(on){ if(seSand.paused) seSand.play().catch(()=>{}); }
+    else { if(!seSand.paused) seSand.pause(); }
+  }
+  function flashTransition(){
+    playOneShot(seFade);
+    setTimeout(()=>stopAudio(seFade), 1300);
+    const el = document.getElementById('fadeOverlay');
+    if(!el) return;
+    el.style.transition='opacity 0.25s ease';
+    el.style.opacity='1';
+    setTimeout(()=>{
+      el.style.transition='opacity 0.75s ease';
+      el.style.opacity='0';
+    }, 280);
+  }
 
   // ================= World / game state =================
   const WORLD_W=20, WORLD_H=20, TIME_LIMIT=60;
@@ -455,7 +517,7 @@
     }
     keys={w:false,a:false,s:false,d:false};
     swing={phase:'idle',t:0,cooldown:0};
-    stats={time:TIME_LIMIT, elapsed:0, swings:0, misses:0, stunned:false, stunTimer:0};
+    stats={time:TIME_LIMIT, elapsed:0, swings:0, misses:0, stunned:false, stunTimer:0, played30:false, played15:false};
     lastEvent={type:null,seq:0,accuracy:0};
   }
 
@@ -479,7 +541,7 @@
   function trySwing(){
     if(stats.stunned || swing.phase!=='idle' || swing.cooldown>0) return;
     swing.phase='windup'; swing.t=0; swing.hitDone=false;
-    stats.swings++; sfxSwoosh();
+    stats.swings++; sfxSwoosh(); playOneShot(seSnap);
   }
 
   function resolveSwingHit(){
@@ -515,6 +577,8 @@
   function updatePlayerPhysics(dt){
     stats.elapsed+=dt;
     stats.time-=dt;
+    if(!stats.played30 && stats.time<=30){ stats.played30=true; playOneShot(se30); lastEvent={type:'time30',seq:lastEvent.seq+1,accuracy:0}; }
+    if(!stats.played15 && stats.time<=15){ stats.played15=true; playOneShot(se15); lastEvent={type:'time15',seq:lastEvent.seq+1,accuracy:0}; }
     if(stats.time<=0 && gameState==='playing'){ stats.time=0; endGame('timeout'); return; }
     if(stats.stunned){
       stats.stunTimer-=dt;
@@ -535,6 +599,9 @@
       }
       player.x=Math.min(WORLD_W-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.x));
       player.y=Math.min(WORLD_H-WORLD_MARGIN,Math.max(WORLD_MARGIN,player.y));
+      setFootstepPlaying(fwd!==0);
+    } else {
+      setFootstepPlaying(false);
     }
     if(!stats.stunned){
       for(const h of holes){
@@ -745,7 +812,8 @@
   function endGame(reason){
     gameState='ended';
     const timedOut = reason==='timeout';
-    if(timedOut) sfxMiss(); else sfxBreak();
+    setFootstepPlaying(false);
+    if(timedOut) sfxMiss(); else { sfxBreak(); playOneShot(seSuika); }
     if(role==='player' && conn && conn.open){
       try{ conn.send(Object.assign({type:'state'}, buildLiveSnapshot(true), {timedOut})); }catch(e){}
     }
@@ -919,6 +987,8 @@
         if(ev.type==='hit'){ sfxHit(ev.accuracy); showToast(ev.accuracy>=85?'パーン！会心の一撃！':'ナイスヒット！','good'); }
         else if(ev.type==='miss'){ sfxMiss(); showToast('空振り！','bad'); }
         else if(ev.type==='stumble'){ sfxStumble(); showToast('穴にハマった！','bad'); }
+        else if(ev.type==='time30'){ playOneShot(se30); }
+        else if(ev.type==='time15'){ playOneShot(se15); }
       }
       if(netPlayer.ended){
         gameState='ended';
@@ -1092,6 +1162,7 @@
       return;
     }
     ensureAudio();
+    playGhostBGM();
     localCamStream = stream;
     camFacingOffset = useFront ? Math.PI : 0;
     ghostUsingFront = useFront;
@@ -1109,7 +1180,7 @@
     for(let i=0;i<MAX_GHOSTS;i++){
       ghosts.push({id:'g'+i, active:true, heading:randomGhostHeading(), vy:0.22+Math.random()*0.5, respawnAt:0});
     }
-    ghostStats = {time:GHOST_TIME_LIMIT, elapsed:0, captured:0, maxCombo:0};
+    ghostStats = {time:GHOST_TIME_LIMIT, elapsed:0, captured:0, maxCombo:0, played30:false, played15:false};
     ghostLastEvent = {type:null, seq:0};
     ghostState='playing';
     showGhostGame();
@@ -1127,6 +1198,8 @@
       if(ghostState!=='playing') return;
       ghostStats.elapsed += 0.15;
       ghostStats.time -= 0.15;
+      if(!ghostStats.played30 && ghostStats.time<=30){ ghostStats.played30=true; playOneShot(se30); ghostLastEvent={type:'time30', seq:ghostLastEvent.seq+1}; }
+      if(!ghostStats.played15 && ghostStats.time<=15){ ghostStats.played15=true; playOneShot(se15); ghostLastEvent={type:'time15', seq:ghostLastEvent.seq+1}; }
       const now = performance.now();
       for(const g of ghosts){
         if(!g.active && now>=g.respawnAt){
@@ -1175,6 +1248,7 @@
 
   function tryCapture(){
     if(ghostState!=='playing') return;
+    playOneShot(seShutter);
     const heading = currentGhostHeading();
     let caughtCount = 0;
     const now = performance.now();
@@ -1314,6 +1388,8 @@
           showToastOn('ghostSpotterToast', c>1 ? ('📸 '+c+'体まとめてキャッチ！') : '📸 キャッチ！', 'good');
         }
         else if(msg.lastEvent.type==='miss'){ sfxMiss(); showToastOn('ghostSpotterToast','空振り…','bad'); }
+        else if(msg.lastEvent.type==='time30'){ playOneShot(se30); }
+        else if(msg.lastEvent.type==='time15'){ playOneShot(se15); }
       }
       if(msg.ended){
         ghostState='ended';
