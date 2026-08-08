@@ -285,6 +285,9 @@
         <div class="stat-corner"><span id="ghostStatTime">⏱ 60s</span><span id="ghostStatCaught">👻 0/0</span></div>
         <div class="toast" id="ghostToast">-</div>
       </div>
+      <label class="gyro-toggle" style="top:calc(46px + env(safe-area-inset-top)); pointer-events:auto;" id="ghostCamToggleRow">
+        <input type="checkbox" id="ghostCamLiveToggle">内カメラ(自撮り)に切替
+      </label>
       <div class="touch-controls">
         <div class="ctrl-btn" id="btnCapture" style="left:50%; right:auto; transform:translateX(-50%); width:110px; height:110px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #ffe08a, #ff9457 70%); border:2px solid rgba(255,255,255,.4); color:#2a1a0f; font-size:15px; bottom:calc(40px + env(safe-area-inset-bottom));">📸<br>キャッチ</div>
       </div>
@@ -413,6 +416,7 @@
   let ghostLastEvent={type:null, seq:0};
   let localCamStream=null;
   let netGhosts=null, netGhostPlayerHeading=0, ghostSeenEventSeq=0;
+  let camFacingOffset=0; // 0 = back camera, Math.PI = front camera (it faces the opposite way)
   let player, melon, holes, keys, swing, stats, gameState='idle';
   let lastEvent = {type:null, seq:0, accuracy:0};
 
@@ -988,11 +992,38 @@
 
   // ================= Ghost hunt game (camera + gyro heading) =================
   let ghostControlsInitialized = false;
+  function currentGhostHeading(){
+    return (gyroActive ? (playerAngleBaseline+gyroDelta) : 0) + camFacingOffset;
+  }
+
   function initGhostControls(){
     const capBtn=document.getElementById('btnCapture');
     const tap=(e)=>{ e.preventDefault(); tryCapture(); };
     capBtn.addEventListener('touchstart', tap, {passive:false});
     capBtn.addEventListener('mousedown', tap);
+
+    document.getElementById('ghostCamLiveToggle').addEventListener('change', (e)=>{
+      switchGhostCamera(e.target.checked);
+    });
+  }
+
+  async function switchGhostCamera(useFront){
+    try{
+      const newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode: useFront?'user':'environment'}, audio:false});
+      if(localCamStream){ localCamStream.getTracks().forEach(tr=>tr.stop()); }
+      localCamStream = newStream;
+      const camVideoEl = document.getElementById('camVideo');
+      camVideoEl.srcObject = newStream;
+      camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
+      camFacingOffset = useFront ? Math.PI : 0;
+      document.getElementById('ghostCamLiveToggle').checked = useFront;
+      if(conn && conn.open && peer){
+        try{ peer.call(conn.peer, localCamStream); }catch(e){}
+      }
+      showToastOn('ghostToast', useFront?'内カメラに切替':'外カメラに切替', 'good');
+    }catch(e){
+      showToastOn('ghostToast','カメラの切り替えに失敗しました','bad');
+    }
   }
 
   async function beginGhostGame(){
@@ -1006,9 +1037,11 @@
     }
     ensureAudio();
     localCamStream = stream;
+    camFacingOffset = useFront ? Math.PI : 0;
     const camVideoEl = document.getElementById('camVideo');
     camVideoEl.srcObject = stream;
     camVideoEl.style.transform = useFront ? 'scaleX(-1)' : 'none';
+    document.getElementById('ghostCamLiveToggle').checked = useFront;
     if(!ghostControlsInitialized){ initGhostControls(); ghostControlsInitialized=true; }
     if(window._enableGyroIfChecked) window._enableGyroIfChecked();
 
@@ -1045,7 +1078,7 @@
       if(ghostState!=='playing') return;
       ghostStats.elapsed += 0.15;
       ghostStats.time -= 0.15;
-      const heading = gyroActive ? (playerAngleBaseline+gyroDelta) : 0;
+      const heading = currentGhostHeading();
       document.getElementById('ghostStatTime').textContent='⏱ 残り'+Math.ceil(Math.max(0,ghostStats.time))+'s';
       document.getElementById('ghostStatCaught').textContent='👻 '+ghostStats.captured+'/'+ghosts.length;
       if(conn && conn.open){
@@ -1061,7 +1094,7 @@
 
   function tryCapture(){
     if(ghostState!=='playing') return;
-    const heading = gyroActive ? (playerAngleBaseline+gyroDelta) : 0;
+    const heading = currentGhostHeading();
     let best=null, bestDiff=Infinity;
     for(const g of ghosts){
       if(g.captured) continue;
