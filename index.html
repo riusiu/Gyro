@@ -780,6 +780,16 @@
     window.addEventListener('keyup',(e)=>{
       const k=e.key.toLowerCase(); if(k==='w'||k==='a'||k==='s'||k==='d') keys[k]=false;
     });
+  }
+
+  // Gyro is shared by both games (suika-wari rotation and ghost-hunt aiming), so it's
+  // initialized once independently of which game is picked first — it used to live only
+  // inside initPlayerControls(), which meant picking the ghost game before ever starting
+  // suika-wari left the gyro (and therefore aiming) completely uninitialized.
+  let gyroSystemInitialized = false;
+  function initGyroSystem(){
+    if(gyroSystemInitialized) return;
+    gyroSystemInitialized = true;
 
     const gyroToggle=document.getElementById('gyroToggle');
     const gyroInvertRow=document.getElementById('gyroInvertRow');
@@ -798,7 +808,8 @@
         }
         gyroInvertRow.style.display='flex'; gyroDebug.style.display='block';
         gyroDebug.textContent='センサー待機中…';
-        playerAngleBaseline = player.angle; headingBaseline=null; gyroDelta=0; gyroActive=true;
+        playerAngleBaseline = (player && typeof player.angle==='number') ? player.angle : 0;
+        headingBaseline=null; gyroDelta=0; gyroActive=true;
 
         // Prefer the absolute/compass-referenced event when available (more stable, less drift).
         // Listening to both event types at once was the bug: they can disagree and fight,
@@ -837,6 +848,7 @@
     });
     window._enableGyroIfChecked = ()=>{ if(gyroToggle.checked && !gyroActive) enableGyro(); };
   }
+  initGyroSystem();
 
   // Convert device orientation Euler angles (degrees) to a world-space heading (radians),
   // correctly handling the phone being held upright (portrait, screen facing the user),
