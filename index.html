@@ -32,6 +32,19 @@
     padding:28px 24px calc(28px + env(safe-area-inset-bottom));
     background:linear-gradient(0deg, rgba(10,6,14,0.94), rgba(10,6,14,0.65) 55%, rgba(10,6,14,0));}
   .fullbleed-overlay .btn.ghost{max-width:280px; margin-left:auto; margin-right:auto;}
+
+  /* Title / Game-Select: shown as a normal centered 16:9 box on wide (landscape/desktop)
+     viewports. On a portrait phone, rotated 90deg to fill the screen edge-to-edge instead
+     of sitting as a small strip with big empty margins above/below. */
+  .rotate-landscape{ width:min(92vw,900px); aspect-ratio:16/9; }
+  @media (orientation:portrait){
+    .rotate-landscape{
+      position:fixed; top:50%; left:50%;
+      width:var(--app-height, 100vh); height:100vw;
+      max-width:none; aspect-ratio:auto;
+      transform:translate(-50%,-50%) rotate(90deg);
+    }
+  }
   .card{width:min(92vw,520px); max-height:90vh; overflow:auto; background:linear-gradient(160deg,var(--ink-soft),#17101f);
     border:1px solid rgba(255,255,255,.1); border-radius:20px; padding:30px 28px; box-shadow:0 30px 60px rgba(0,0,0,.5);}
   .card h1{font-family:'Baloo 2',sans-serif; font-size:clamp(22px,5vw,32px); margin:0 0 6px;
@@ -208,27 +221,23 @@
 
   <!-- Title (post-connection hub) -->
   <div class="screen hidden" id="scrTitle">
-    <div style="display:flex; flex-direction:column; align-items:center; gap:14px; width:min(92vw,900px);">
-      <div style="position:relative; width:100%; aspect-ratio:16/9; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px rgba(0,0,0,.4);">
+    <div class="rotate-landscape">
+      <div style="position:relative; width:100%; height:100%; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px rgba(0,0,0,.4);">
         <img src="title.jpg" alt="夏の声" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;">
         <button id="titleToSelectBtn" aria-label="スタート" style="position:absolute; left:81%; top:50%; width:23%; height:36%; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
+        <button id="titleBackBtn" style="position:absolute; left:81%; top:84%; width:26%; transform:translate(-50%,-50%); font-family:'Baloo 2',sans-serif; font-size:12px; padding:9px 6px; border-radius:999px; background:rgba(15,9,20,.72); color:#fff; border:1px solid rgba(255,255,255,.35); cursor:pointer;">役割選択に戻る</button>
       </div>
-      <p class="sub" id="titleStatus" style="text-align:center; margin:0;">準備ができました。</p>
-      <button class="btn ghost" id="titleBackBtn" style="max-width:280px;">役割選択に戻る</button>
     </div>
   </div>
 
   <!-- Game select -->
   <div class="screen hidden" id="scrGameSelect">
-    <div style="display:flex; flex-direction:column; align-items:center; gap:12px; width:min(94vw,960px);">
-      <div style="position:relative; width:100%; aspect-ratio:16/9; border-radius:16px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.5);">
+    <div class="rotate-landscape">
+      <div style="position:relative; width:100%; height:100%; border-radius:16px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.5);">
         <img src="senntakugamenn.jpg" alt="ゲームをえらぶ" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;">
         <button id="pickGhost" aria-label="ゆうれい探し" style="position:absolute; left:29.8%; top:27.2%; width:13.6%; aspect-ratio:1/1; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
         <button id="pickSuika" aria-label="スイカ割り" style="position:absolute; left:79.2%; top:67.2%; width:17.4%; aspect-ratio:1/1; transform:translate(-50%,-50%); border-radius:50%; background:transparent; border:none; cursor:pointer; padding:0;"></button>
       </div>
-      <label style="display:flex; align-items:center; justify-content:center; gap:8px; font-size:12.5px; color:var(--text-dim);">
-        <input type="checkbox" id="ghostFrontCamToggle" style="transform:scale(0.9);"> ゆうれい探しで内カメラ(自撮り側)を使う
-      </label>
     </div>
   </div>
 
@@ -392,8 +401,7 @@
     document.getElementById('gameView').classList.add('hidden');
     document.getElementById('ghostView').classList.remove('hidden');
   }
-  function goToTitle(statusText){
-    document.getElementById('titleStatus').textContent = statusText;
+  function goToTitle(){
     showScreen('scrTitle');
     playTitleBGM();
   }
@@ -1071,8 +1079,8 @@
   }
 
   document.getElementById('hostBackBtn').addEventListener('click', ()=>{ teardownPeer(); showScreen('scrRole'); });
-  document.getElementById('hostSoloBtn').addEventListener('click', ()=>{ document.getElementById('hostStartBtn').disabled=false; goToTitle('(観測者なし・ソロモード)'); });
-  document.getElementById('hostStartBtn').addEventListener('click', ()=>{ goToTitle((conn&&conn.open)?'✅ 観測者と接続中です':'(観測者なし・ソロモード)'); });
+  document.getElementById('hostSoloBtn').addEventListener('click', ()=>{ document.getElementById('hostStartBtn').disabled=false; goToTitle(); });
+  document.getElementById('hostStartBtn').addEventListener('click', ()=>{ goToTitle(); });
   document.getElementById('titleToSelectBtn').addEventListener('click', ()=> showScreen('scrGameSelect'));
   document.getElementById('titleBackBtn').addEventListener('click', ()=>{ clearTimers(); teardownPeer(); role=null; roomCode=null; showScreen('scrRole'); });
   document.getElementById('pickSuika').addEventListener('click', ()=>{ beginPlayerGame(); if(window._enableGyroIfChecked) window._enableGyroIfChecked(); });
@@ -1148,7 +1156,7 @@
   }
 
   async function beginGhostGame(){
-    const useFront = document.getElementById('ghostFrontCamToggle').checked;
+    const useFront = false; // pre-game toggle removed; starts on back camera, switch in-game via the flip button
     let stream;
     try{
       stream = await navigator.mediaDevices.getUserMedia({video:{facingMode: useFront?'user':'environment'}, audio:false});
@@ -1329,7 +1337,7 @@
     }, 8000);
 
     peer.on('open', ()=>{
-      conn = peer.connect(PEER_PREFIX+code, {reliable:false});
+      conn = peer.connect(PEER_PREFIX+code, {reliable:true});
       conn.on('open', ()=>{
         if(settled) return; settled=true; clearTimeout(failTimeout);
         role='spotter'; roomCode=code;
@@ -1408,7 +1416,7 @@
     gameState='idle'; ghostState='idle';
 
     if(role==='player'){
-      goToTitle((conn && conn.open) ? '✅ 観測者と接続中です' : '(観測者なし・ソロモード)');
+      goToTitle();
     } else if(role==='spotter'){
       seenEventSeq = 0; ghostSeenEventSeq = 0;
       document.getElementById('joinWaitHeading').textContent = '🎮 つぎのゲームを待っています';
